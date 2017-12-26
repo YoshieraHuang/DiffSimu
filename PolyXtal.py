@@ -6,7 +6,6 @@ import numpy as np
 import sys
 import logging
 import Lattice
-import HKL
 
 class PolyXtal(object):
 	'''
@@ -17,11 +16,14 @@ class PolyXtal(object):
 
 		self.lattice = lattice
 
-	def d_spacing(self, i):
-		if not isinstance(i, (HKL.index, HKL.Familyindex)):
-			logging.error('Unexpected Class!')
+	def d_spacing(self, hklfamilies):
+		if isinstance(hklfamilies, Lattice.Familyindex):
+			hklfamilies = np.array((hklfamilies))[None]
 
-		if isinstance(i, HKL.index):
-			logging.warning('For d_spacing of PolyXtal, input index should be Familyindex!')
+		return self.lattice.d_spacing([hklfamily.sons()[0] for hklfamily in hklfamilies])
 
-		return self.lattice.d_spacing(i.sons()[0])
+if __name__ == '__main__':
+	Cu = Lattice.Lattice(material = 'Cu')
+	X = PolyXtal(Cu)
+	hkl = Lattice.Familyindex((2,0,0)), Lattice.Familyindex((3,3,1))
+	print(X.d_spacing(hkl))

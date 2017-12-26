@@ -2,17 +2,69 @@
 # @Date    : 2017-12-22 16:30:40
 # @Author  : J. W. Huang (huangjasper@126.com)
 
+# Public modules
 import numpy as np
 from scipy import linalg
 import sys
-import logging
+import logging; logging.basicConfig(level = logging.INFO)
+import itertools
+
+# My modules
 import LUT
 from Vec import Vectors
+EPS = 1e-5
+EPS_sf = 1e-5
 
-logging.basicConfig(level = logging.INFO)
+def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
+	if type(data) in (list,tuple):
+		# if data is a list, recurse with the data
+		results = []
+		for datum in data:
+			datum_done, diction, i = Replace_placeholder(datum, args, diction, i, False)
+			results.append(datum_done)
+
+		if top:
+			return results
+		else:
+			return results, diction, i
+	elif type(data) is str and data[0] == '$':
+		# if data is a place holder, replace this
+		if data in diction:
+			if top:
+				return diction[data]
+			else:
+				return diction[data], diction, i
+
+		if type(args) in (list,tuple):
+			diction[data] = args[i]
+		else:
+			diction[data] = args
+
+		i += 1
+
+		if top :
+			return diction[data]
+		else:
+			return diction[data], diction , i
+	else:
+
+		if top:
+			return data
+		else:
+			return data, diction, i
+
 
 class LatticeParameter(object):
-	"""include lattice parameters"""
+	'''
+		Lattice Paramter
+		Attributes:
+			a,b,c,alpha,beta,gamma: six lattice parameters
+
+		Methods:
+			direct_matrix(): the direct matrix of lattice
+			reciprocal_matrix(): the reciprocal matrix of lattice
+			report(): show the informations of LatticeParamter
+	'''
 
 	def __init__(self, arr):
 		super(LatticeParameter, self).__init__()
@@ -39,23 +91,29 @@ class LatticeParameter(object):
 				return False
 		return True
 
-	@property
 	def direct_matrix(self):
+		if hasattr(self, '_direct_matrix'):
+			return self._direct_matrix
+
 		v1 = self.a*Vectors((1,0,0))
 		v2 = self.b*Vectors((np.cos(self.gamma),np.sin(self.gamma),0))
 		v3 = self.c*Vectors((np.cos(self.beta),(np.cos(self.alpha)-np.cos(self.beta)*np.cos(self.gamma))/np.sin(self.gamma))).norm
 		m = np.vstack((v1,v2,v3))
 
-		logging.info('Direct matrix is\t, (%s)'%(str(m)))
+		logging.info('Direct matrix is\n %s'%(str(m)))
+		self._direct_matrix = m
 		return m
 
-	@property
 	def reciprocal_matrix(self):
+		if hasattr(self, '_reciprocal_matrix'):
+			return self._reciprocal_matrix
+
 		def Calc_reciprocal_vectors(v):
 			return np.vstack((np.cross(v[1],v[2]),np.cross(v[2],v[0]),np.cross(v[0],v[1])))/linalg.det(v)
-		m = Calc_reciprocal_vectors(self.direct_matrix)
+		m = Calc_reciprocal_vectors(self.direct_matrix())
 
-		logging.info('Reciprocal matrix is\t, (%s)'%(str(m)))
+		logging.info('Reciprocal matrix is\n %s'%(str(m)))
+		self._reciprocal_matrix = m
 		return m
 
 	def report(self, fout = None):
@@ -81,32 +139,27 @@ class Atom(object):
 		else:
 			self.coor = FracCoor(atomcoor)
 
-class FracCoor(object):
-	def __init__(self, coors):
-		super(FracCoor, self).__init__()
+class FracCoor(Vectors):
+	def __new__(cls, input_array):
+		if len(input_array) != 3:
+			logging.error('Coordinates must be 3-dimensional!')
 
-		if len(coors) == 3:
-			pass
-		else:
-			logging.error('Coordinates are not 3-dimensional')
-		
-		for coor in coors:
-			if coor < 0 or coor >1:
-				logging.error('Fractional coordinates exceeds 0 ~ 1!')
+		if any((i < 0 or i > 1 for i in input_array)):
+			logging.error('Fractional coordinates must be 0~1!')
 
-		self.iter = np.array(coors)
+		return np.asarray(input_array).view(cls)
 
 	@property
 	def x(self):
-		return self.iter[0]
+		return self[0]
 
 	@property
 	def y(self):
-		return self.iter[1]
+		return self[1]
 
 	@property
 	def z(self):
-		return self.iter[2]
+		return self[2]
 
 class Element(object):
 	def __init__(self, name):
@@ -121,45 +174,6 @@ class Lattice(object):
 		self.LP = None
 		self.atoms = []
 
-		def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
-			if type(data) in (list,tuple):
-				# if data is a list, recurse with the data
-				results = []
-				for datum in data:
-					datum_done, diction, i = Replace_placeholder(datum, args, diction, i, False)
-					results.append(datum_done)
-
-				if top:
-					return results
-				else:
-					return results, diction, i
-			elif type(data) is str and data[0] == '$':
-				# if data is a place holder, replace this
-				if data in diction:
-					if top:
-						return diction[data]
-					else:
-						return diction[data], diction, i
-
-				if type(args) in (list,tuple):
-					diction[data] = args[i]
-				else:
-					diction[data] = args
-
-				i += 1
-
-				if top :
-					return diction[data]
-				else:
-					return diction[data], diction , i
-			else:
-
-				if top:
-					return data
-				else:
-					return data, diction, i
-
-
 		if not material is None or (not structure is None and not args is None):
 			if not material is None:
 				# material is input
@@ -169,7 +183,6 @@ class Lattice(object):
 				# structure and args is input
 				latp, atomsymbols = Replace_placeholder(LUT.dict_structure[structure], args)
 
-			print(latp, atomsymbols)
 			self.Add_latticeparameters(LatticeParameter(latp))
 			for atomsymbol in atomsymbols[1:]:
 				self.Add_atom(Atom(*atomsymbol))
@@ -192,10 +205,103 @@ class Lattice(object):
 			logging.error('argument should be type \'Atom\'')
 
 		self.atoms.append(atom)
-		logging.info('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor.iter)))
+		logging.info('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
 
 	def report(self):
 		self.LP.report()
 		for atom in self.atoms:
-			print("atom %s at %s"%(atom.element.name, str(atom.coor.iter)))
+			print("atom %s at %s"%(atom.element.name, str(atom.coor)))
+
+	def factor(self, hkls):
+		'''
+		 	Structure factor for one or a group of hkl
+		'''
+		if len(self.atoms) == 0:
+			logging.error('No atoms in Lattice!')
+
+		if isinstance(hkls, index):
+			hkls = hkls[None,:]
+
+		results = []
+		for hkl in hkls:
+			sf = 0
+			for atom in self.atoms:
+				sf0 = np.sum(atom.coor * hkl)
+				sf += atom.element.scatter_factor * np.exp(2j*np.pi*sf0)
+			results.append(sf)
+
+		return np.array(results)
+
+	def isextinct(self, hkls):
+		if isinstance(hkls, index):
+			hkls = hkls[None,:]
+		results = [np.absolute(self.factor(hkl)) < EPS_sf for hkl in hkls]
+		return np.array(results)
+
+	def d_spacing(self, hkls):
+		'''
+			return the d-spacing of one or a group of given hkls
+			if hkl is extinct, None will be returned 
+		'''
+		
+		results = []
+		if isinstance(hkls, index):
+			hkls = hkls[None,:]
+		for hkl in hkls:
+			if self.isextinct(hkl):
+				results.append(None)
+			else:
+				k_vector = Vectors(self.LP.reciprocal_matrix() * hkl)
+				results.append(1 / k_vector.length)
+
+		return np.array(results)
+
+
+class index(Vectors):
+	'''
+		index of lattice plane in a Xtal
+	'''
+	def __new__(cls, input_array):
+
+		if len(input_array) != 3:
+			logging.error('index must be 3-dimensional!')
+		if any((np.fabs(e - np.floor(e)) > EPS for e in input_array)):
+			logging.warning('Non-integer is input to hkl')
+
+		return np.array(input_array).view(cls)
+
+
+class Familyindex(object):
+	'''
+		index of a family of lattice plane in a Xtal
+	'''
+	def __init__(self, input_array):
+		super(Familyindex, self).__init__()
+
+		if any([np.fabs(e - np.floor(e)) > EPS for e in input_array]):
+			logging.warning('Non-integer is input to hkls')
+
+		self.family = index(input_array)
+
+	def sons(self):
+		'''
+			give the sons of this family of lattice plane
+		'''
+		if not hasattr(self, 'family'):
+			logging.error('Familyhkl is not initialized well!')
+
+		store = set()
+		perms = list(itertools.permutations(self.family, 3))
+		signs = list(itertools.product((1,-1),(1,-1),(1,-1)))
+		for perm in perms:
+			for sign in signs:
+				i = [p*s for p,s in zip(perm, sign)]
+				store.add(tuple(i))
+		return [index(s) for s in store]
+
+if __name__ == '__main__':
+	l = Lattice(material = 'Cu')
+	l.report()
+	hkl = (index((2,0,0)), index((1,2,0)), index((3,3,-1)),index((3,3,-1)))
+	print(l.d_spacing(hkl))
 

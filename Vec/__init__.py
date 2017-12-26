@@ -14,7 +14,7 @@ class Vectors(np.ndarray):
 
 	@property
 	def length(self):
-		return np.sqrt(np.sum(self **2))
+		return float(np.sqrt(np.sum(self **2)))
 
 	@property
 	def norm(self):
