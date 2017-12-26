@@ -46,12 +46,23 @@ class Vectors(np.ndarray):
 		if self.parallel(other):
 			raise ValueError("Two vectors are parallel")
 
-		return np.cross(self,other)
+		return Vectors(np.cross(self,other))
 
 	def parallel(self,other):
-		if self.betweenangle_rad(other) < EPS:
-			return True
-		return False
+		'''
+			When two Vectors is not parallel, 0 will be returned
+			When two Vectors is parallel and have same direction, 1 will be returned.
+			When two Vectors is reverse-parallel, 2 will be returned
+			When directions do not matter, this function can also work 
+		'''
+		angle = self.betweenangle_rad(other)
+		if angle < EPS:
+			return 1
+
+		if np.pi - angle < EPS:
+			return 2
+
+		return 0
 
 	def perpendicular(self, other):
 		if np.fabs(self.betweenangle_rad(other) - np.pi/2) < EPS:

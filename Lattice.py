@@ -78,9 +78,10 @@ class LatticeParameter(object):
 			self.beta = vc.betweenangle_rad(va)
 			self.gamma = va.betweenangle_rad(vb)
 
-		logging.info('lattice parameters = (%f %f %f %f %f %f)'%(self.a, self.b, self.c, np.rad2deg(self.alpha), np.rad2deg(self.beta), np.rad2deg(self.gamma)))
+		logging.debug('lattice parameters = (%f %f %f %f %f %f)'%(self.a, self.b, self.c, np.rad2deg(self.alpha), np.rad2deg(self.beta), np.rad2deg(self.gamma)))
 		if not self.isvalid():
 			logging.error('lattice parameter is invalid!')
+			raise ValueError
 
 	def isvalid(self):
 		if self.a <= 0 or self.b <= 0 or self.c <= 0:
@@ -100,7 +101,7 @@ class LatticeParameter(object):
 		v3 = self.c*Vectors((np.cos(self.beta),(np.cos(self.alpha)-np.cos(self.beta)*np.cos(self.gamma))/np.sin(self.gamma))).norm
 		m = np.vstack((v1,v2,v3))
 
-		logging.info('Direct matrix is\n %s'%(str(m)))
+		logging.debug('Direct matrix is\n %s'%(str(m)))
 		self._direct_matrix = m
 		return m
 
@@ -112,7 +113,7 @@ class LatticeParameter(object):
 			return np.vstack((np.cross(v[1],v[2]),np.cross(v[2],v[0]),np.cross(v[0],v[1])))/linalg.det(v)
 		m = Calc_reciprocal_vectors(self.direct_matrix())
 
-		logging.info('Reciprocal matrix is\n %s'%(str(m)))
+		logging.debug('Reciprocal matrix is\n %s'%(str(m)))
 		self._reciprocal_matrix = m
 		return m
 
@@ -143,9 +144,10 @@ class FracCoor(Vectors):
 	def __new__(cls, input_array):
 		if len(input_array) != 3:
 			logging.error('Coordinates must be 3-dimensional!')
-
+			raise ValueError
 		if any((i < 0 or i > 1 for i in input_array)):
 			logging.error('Fractional coordinates must be 0~1!')
+			raise ValueError
 
 		return np.asarray(input_array).view(cls)
 
@@ -194,18 +196,21 @@ class Lattice(object):
 	def Add_latticeparameters(self, latticeparam):
 		if not type(latticeparam) is LatticeParameter:
 			logging.error('argument should be type \'LatticeParameter\'')
+			raise TypeError
 
 		if not self.LP is None:
 			logging.warning('the existing Lattice Parameters will be replaced!!')
+
 		self.LP = latticeparam
 		logging.info('Appending of lattice parameters is done!')
 
 	def Add_atom(self, atom):
 		if not type(atom) is Atom:
 			logging.error('argument should be type \'Atom\'')
+			raise TypeError
 
 		self.atoms.append(atom)
-		logging.info('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
+		logging.debug('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
 
 	def report(self):
 		self.LP.report()
@@ -218,6 +223,7 @@ class Lattice(object):
 		'''
 		if len(self.atoms) == 0:
 			logging.error('No atoms in Lattice!')
+			raise ValueError
 
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
@@ -227,12 +233,16 @@ class Lattice(object):
 			sf = 0
 			for atom in self.atoms:
 				sf0 = np.sum(atom.coor * hkl)
-				sf += atom.element.scatter_factor * np.exp(2j*np.pi*sf0)
+				sf += complex(atom.element.scatter_factor * np.exp(2j*np.pi*sf0))
 			results.append(sf)
+			logging.debug('The Structure Factor of %s is %r\n'%(str(hkl), sf))
 
 		return np.array(results)
 
 	def isextinct(self, hkls):
+		'''
+			Return True when this hkl is structurally extinct
+		'''
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
 		results = [np.absolute(self.factor(hkl)) < EPS_sf for hkl in hkls]
@@ -246,7 +256,8 @@ class Lattice(object):
 		
 		results = []
 		if isinstance(hkls, index):
-			hkls = hkls[None,:]
+			hkls = hkls[None,:] # add a dimensional to make it iterable
+
 		for hkl in hkls:
 			if self.isextinct(hkl):
 				results.append(None)
@@ -257,6 +268,36 @@ class Lattice(object):
 		return np.array(results)
 
 
+def Gen_hklfamilies(hklrange = (5,5,5), * , lattice = None):
+	'''
+		give an array of hklfamilies from given range of index
+		NOTE:
+		This is a GENERATOR
+	'''
+	for h in range(hklrange[0] + 1):
+		for k in range(min(h, hklrange[1]) + 1):
+			for l in range(min(k, hklrange[2]) + 1):
+				if h == 0 and k == 0 and  l == 0:
+					continue
+				hkl = Familyindex((h,k,l))
+				if (lattice is None) or (not lattice.isextinct(hkl)):
+					yield hkl
+
+
+def Gen_hkls(hklfamilies):
+	'''
+		give an array of hkl from given hklfamilies
+		NOTE:
+		This is a GENERATOR
+	'''
+
+	if isinstance(hklfamilies, Familyindex):
+		hklfamilies = hklfamilies[None,:]
+
+	for hklfamily in hklfamilies:
+		for hkl in hklfamily.sons():
+			yield hkl
+
 class index(Vectors):
 	'''
 		index of lattice plane in a Xtal
@@ -265,33 +306,26 @@ class index(Vectors):
 
 		if len(input_array) != 3:
 			logging.error('index must be 3-dimensional!')
+			raise TypeError
 		if any((np.fabs(e - np.floor(e)) > EPS for e in input_array)):
 			logging.warning('Non-integer is input to hkl')
 
 		return np.array(input_array).view(cls)
 
 
-class Familyindex(object):
+class Familyindex(index):
 	'''
 		index of a family of lattice plane in a Xtal
 	'''
-	def __init__(self, input_array):
-		super(Familyindex, self).__init__()
-
-		if any([np.fabs(e - np.floor(e)) > EPS for e in input_array]):
-			logging.warning('Non-integer is input to hkls')
-
-		self.family = index(input_array)
+	def __new__(cls, input_array):
+		return super().__new__(cls,input_array)
 
 	def sons(self):
 		'''
 			give the sons of this family of lattice plane
 		'''
-		if not hasattr(self, 'family'):
-			logging.error('Familyhkl is not initialized well!')
-
 		store = set()
-		perms = list(itertools.permutations(self.family, 3))
+		perms = list(itertools.permutations(self, 3))
 		signs = list(itertools.product((1,-1),(1,-1),(1,-1)))
 		for perm in perms:
 			for sign in signs:
@@ -302,6 +336,3 @@ class Familyindex(object):
 if __name__ == '__main__':
 	l = Lattice(material = 'Cu')
 	l.report()
-	hkl = (index((2,0,0)), index((1,2,0)), index((3,3,-1)),index((3,3,-1)))
-	print(l.d_spacing(hkl))
-
