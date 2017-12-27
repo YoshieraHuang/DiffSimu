@@ -21,7 +21,7 @@ class Vectors(np.ndarray):
 		if self.shape == (3,):
 			if self.length == 0:
 				raise ValueError("Zero Vectors!")
-			return self / self.length
+			return Vectors(self / self.length)
 		elif self.shape == (2,):
 			ele3 = 1 - self.length
 			if ele3 < 0:
@@ -43,12 +43,12 @@ class Vectors(np.ndarray):
 		return float(np.sum((s*o for s,o in zip(self,other))))
 
 	def cross(self,other):
-		if self.parallel(other):
+		if self.isparallel(other):
 			raise ValueError("Two vectors are parallel")
 
 		return Vectors(np.cross(self,other))
 
-	def parallel(self,other):
+	def isparallel(self,other):
 		'''
 			When two Vectors is not parallel, 0 will be returned
 			When two Vectors is parallel and have same direction, 1 will be returned.
@@ -64,7 +64,7 @@ class Vectors(np.ndarray):
 
 		return 0
 
-	def perpendicular(self, other):
+	def isperpendicular(self, other):
 		if np.fabs(self.betweenangle_rad(other) - np.pi/2) < EPS:
 			return True
 		return False

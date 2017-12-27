@@ -12,6 +12,7 @@ import itertools
 # My modules
 import LUT
 from Vec import Vectors
+import myfunctool as FT
 EPS = 1e-5
 EPS_sf = 1e-5
 
@@ -59,10 +60,10 @@ class LatticeParameter(object):
 		Lattice Paramter
 		Attributes:
 			a,b,c,alpha,beta,gamma: six lattice parameters
+			direct_matrix: the direct matrix of lattice
+			reciprocal_matrix: the reciprocal matrix of lattice
 
 		Methods:
-			direct_matrix(): the direct matrix of lattice
-			reciprocal_matrix(): the reciprocal matrix of lattice
 			report(): show the informations of LatticeParamter
 	'''
 
@@ -92,6 +93,7 @@ class LatticeParameter(object):
 				return False
 		return True
 
+	@property
 	def direct_matrix(self):
 		if hasattr(self, '_direct_matrix'):
 			return self._direct_matrix
@@ -105,13 +107,14 @@ class LatticeParameter(object):
 		self._direct_matrix = m
 		return m
 
+	@property
 	def reciprocal_matrix(self):
 		if hasattr(self, '_reciprocal_matrix'):
 			return self._reciprocal_matrix
 
 		def Calc_reciprocal_vectors(v):
 			return np.vstack((np.cross(v[1],v[2]),np.cross(v[2],v[0]),np.cross(v[0],v[1])))/linalg.det(v)
-		m = Calc_reciprocal_vectors(self.direct_matrix())
+		m = Calc_reciprocal_vectors(self.direct_matrix)
 
 		logging.debug('Reciprocal matrix is\n %s'%(str(m)))
 		self._reciprocal_matrix = m
@@ -228,16 +231,20 @@ class Lattice(object):
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
 
-		results = []
 		for hkl in hkls:
 			sf = 0
 			for atom in self.atoms:
 				sf0 = np.sum(atom.coor * hkl)
 				sf += complex(atom.element.scatter_factor * np.exp(2j*np.pi*sf0))
-			results.append(sf)
+			if np.absolute(sf) < EPS_sf:
+				sf = None
+			
 			logging.debug('The Structure Factor of %s is %r\n'%(str(hkl), sf))
+			yield sf
 
-		return np.array(results)
+	@property
+	def reciprocal_matrix(self):
+		return self.LP.reciprocal_matrix
 
 	def isextinct(self, hkls):
 		'''
@@ -245,8 +252,11 @@ class Lattice(object):
 		'''
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
-		results = [np.absolute(self.factor(hkl)) < EPS_sf for hkl in hkls]
-		return np.array(results)
+		for sta in self.factor(hkls):
+			if sta is None:
+				yield False
+			else:
+				yield True
 
 	def d_spacing(self, hkls):
 		'''
@@ -254,19 +264,51 @@ class Lattice(object):
 			if hkl is extinct, None will be returned 
 		'''
 		
-		results = []
 		if isinstance(hkls, index):
 			hkls = hkls[None,:] # add a dimensional to make it iterable
 
-		for hkl in hkls:
-			if self.isextinct(hkl):
-				results.append(None)
+		for vec in self.vec_in_lattice(hkls):
+			if vec is None:
+				yield None
 			else:
-				k_vector = Vectors(self.LP.reciprocal_matrix() * hkl)
-				results.append(1 / k_vector.length)
+				yield 1/vec.length
 
-		return np.array(results)
+	def D_spacing(self, hkls):
+		return FT.tolist(self.d_spacing(hkls))
 
+	def vec_in_lattice(self , hkls, rcp_matrix = None):
+		'''
+			transform index to Vectors in lattice orthogonal frame 
+		'''
+		if isinstance(hkls, index):
+			hkls = hkls[None,:]
+
+		if rcp_matrix is None:
+			rcp_matrix = self.reciprocal_matrix
+
+		for hkl in hkls:
+			yield Vectors(np.dot(hkl,rcp_matrix))
+
+	def Vec_in_lattice(self, hkls, rcp_matrix = None):
+		return FT.tolist(self.vec_in_lattice(hkls, rcp_matrix))
+
+	def isperpendicular(self, hkl1, hkl2):
+		'''
+			if these two hkls are perpendicular, return True
+			else return False 
+		'''
+
+		vec1, vec2 = self.Vec_in_lattice(hkl1), self.Vec_in_lattice(hkl2)
+		return vec1.isperpendicular(vec2)
+
+	def isparallel(self, hkl1, hkl2):
+		'''
+			if these two hkls are parallel and have same direction, return 1;
+			if reverse-parallel, return 2;
+			else return 0
+		'''
+		vec1, vec2 = self.Vec_in_lattice(hkl1), self.Vec_in_lattice(hkl2)
+		return vec1.isparallel(vec2)
 
 def Gen_hklfamilies(hklrange = (5,5,5), * , lattice = None):
 	'''
