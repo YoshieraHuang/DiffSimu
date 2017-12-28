@@ -9,6 +9,7 @@ import logging
 
 import lattice as LTTC
 import xray as XR
+import myfunctools as FT
 
 class PolyXtal(object):
 	'''
@@ -39,4 +40,4 @@ if __name__ == '__main__':
 	Cu = LTTC.Lattice(material = 'Cu')
 	X = PolyXtal(Cu)
 	hkl = LTTC.Familyindex((2,0,0)), LTTC.Familyindex((3,3,1)), LTTC.Familyindex((3,1,1))
-	print(X.D_spacing(hkl))
+	print(X.d_spacing(hkl))

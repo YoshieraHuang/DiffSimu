@@ -12,7 +12,7 @@ import itertools
 # My modules
 import LUT
 from Vec import Vectors
-import myfunctool as FT
+import myfunctools as FT
 EPS = 1e-5
 EPS_sf = 1e-5
 
@@ -268,10 +268,7 @@ class Lattice(object):
 			hkls = hkls[None,:] # add a dimensional to make it iterable
 
 		for vec in self.vec_in_lattice(hkls):
-			if vec is None:
-				yield None
-			else:
-				yield 1/vec.length
+			yield 1/vec.length
 
 	def D_spacing(self, hkls):
 		return FT.tolist(self.d_spacing(hkls))
@@ -378,3 +375,8 @@ class Familyindex(index):
 if __name__ == '__main__':
 	l = Lattice(material = 'Cu')
 	l.report()
+	hkls = Gen_hkls(Gen_hklfamilies())
+	ds = l.d_spacing(hkls)
+	for hkl,d in zip(hkls,ds):
+		print(hkl,d)
+

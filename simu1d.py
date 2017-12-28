@@ -49,18 +49,41 @@ class DiffSimu_1D(object):
 
 		self._xray = xr
 
-	def calc(self, *, precision = 0.01, norm = True):
-		for wl, intn in self.xray.spectrum:
-			for hkl in LTTC.Gen_hklfamilies():
-				
+	def calc(self, *, precision = 0.01, norm = True, range_2th = (0, np.pi/2)):
+		profile = Profile1d()
+		for wl, intn_wl in self.xray.spectrum:
+			hkls = LTTC.Gen_hklfamilies(lattice = self.xtal.lattice)
+			peaks = self.bragg(hkls, wl, intn)
+			for peak in peaks:
+				if peak.tth < range_2th[0]:
+					continue
+				if peak.tth > range_2th[1]:
+					break
+				profile.Add_peak(peak)
+			if norm:
+				profile.norm()
 
+		self.profile = profile
 
-	def show(self):
-		plt.plot(self.tth, self.intensity)
-		plt.title('1D simulation')
-		plt.xlabel('2theta (degrees)')
-		plt.ylabel('Intensity (a. u.)')
-		plt.show()
+	def bragg(self, hkls, wl, intn, peak_width = 0.1, peak_shape = 'Gauss'):
+		for hkl, d_spacing, factor in zip(hkls, self.xtal.d_spacings(hkls), self.xtal.factor(hkls)):
+			if factor is None:
+				continue
+			peak = Peak(peak_width = peak_width, peak_shape = peak_shape)
+			tth = np.arcsin(wl/(2*d_spacing))
+			peak.tth =tth
+			peak.intn = intn*factor
+			yield peak
+
+	
+
+def Profile1d(object):
+	'''
+		1D profile of diffraction
+	'''
+	def __init__(self):
+		super().__init__()
+
 
 if __name__ == '__main__':
 	pass
