@@ -3,20 +3,15 @@
 # @Author  : J. W. Huang (huangjasper@126.com)
 
 import types
+import numpy as np
 
 def tolist(gen):
-	'''
-		list all elements in generator
-	'''
+
 	if not isinstance(gen, types.GeneratorType):
 		raise TypeError('Argument must be a generator')
 
-	results = list(gen);
-	if len(results) == 1:
-		return results[0]
-	else:
-		return results
-
+	l = list(gen)
+	return l[0] if len(l) == 1 else l
 
 if __name__ == '__main__':
 	pass

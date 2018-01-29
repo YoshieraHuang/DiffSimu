@@ -31,10 +31,10 @@ class PolyXtal(object):
 		if isinstance(hklfamilies, LTTC.Familyindex):
 			hklfamilies = np.array((hklfamilies))[None] ## add a dimension to make it iterable
 
-		return self.lattice.d_spacing([hklfamily.sons()[0] for hklfamily in hklfamilies])
+		return self.lattice.d_spacing(hklfamilies)
 
 	def D_spacing(self, hklfamilies):
-		return FT.tolist(self.d_spacing(hklfamilies)) 
+		return FT.ndarrayfromiter(self.d_spacing(hklfamilies)) 
 
 if __name__ == '__main__':
 	Cu = LTTC.Lattice(material = 'Cu')

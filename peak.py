@@ -4,24 +4,14 @@
 
 import numpy as np
 import sys
-import functools
+import logging
+
+import lattice as LTTC
 
 class Peak(object):
 	'''
 		diffraction maximum
 	'''
-	def __init__(self, *, peak_shape = 'Gauss1d', peak_args = (0.1,), tth = None, gamma = None, intn = None):
-		super().__init__()
-
-		self.args = peak_args
-		self.shape = peak_shape
-		self.tth = tth
-		self.gamma = gamma
-		self.intn = intn
-		self.dim = dimension
-
-		self.Gen_peak()
-
 	@property
 	def tth(self):
 		return self._tth
@@ -29,7 +19,7 @@ class Peak(object):
 	@tth.setter
 	def tth(self, v):
 		if not self.tth is None:
-			logging.warning('2theta of %s will be changed!'%(self.__name__))
+			logging.debug('2theta will be changed!')
 		self._tth = v
 
 	@property
@@ -39,8 +29,16 @@ class Peak(object):
 	@gamma.setter
 	def gamma(self, v):
 		if not self.gamma is None:
-			logging.warning('gamma of %s will be changed!'%(self.__name__))
+			logging.debug('gamma will be changed!')
 		self._gamma = v
+
+	@property
+	def wl(self):
+		return self._wl
+
+	@wl.setter
+	def wl(self, v):
+		self._wl = v
 
 	@property
 	def intn(self):
@@ -49,7 +47,7 @@ class Peak(object):
 	@intn.setter
 	def intn(self, v):
 		if not self.intn is None:
-			logging.warning('intensity of %s will be changed!'%(self.__name__))
+			logging.debug('intensity will be changed!')
 		self._intn = v
 
 	@property
@@ -70,25 +68,68 @@ class Peak(object):
 		self._shape = v
 		self.Gen_peak()
 
-	def Guass1d(self, width = 0.1):
+	@property
+	def index(self):
+		return self._index
+
+	@index.setter
+	def index(self, v):
+		if not isinstance(v, LTTC.index):
+			raise TypeError('Must be index!')
+		self._index = v
+
+	@property
+	def d_spacing(self):
+		return self._d_spacing
+
+	@d_spacing.setter
+	def d_spacing(self,v):
+		if not type(v) is float:
+			raise TypeError('Must be float!')
+		self._d_spacing = v
+
+	def __init__(self, *, peak_shape = 'Gauss1d', peak_args = (0.1,), tth = None, gamma = None, intn = 1):
+		super().__init__()
+
+		self._args = peak_args
+		self._shape = peak_shape
+		self._tth = tth
+		self._gamma = gamma
+		self._intn = intn
+
+		self.Gen_peak()
+
+	def Gaussian1d(self, width = 0.1):
 		a = self.tth
-		r = 8*np.log(2)
-		c2 = width**2 / r
+		c2 = width**2 / (8 * np.log(2))
 		return lambda x: np.exp(-(x - a)**2/(2*c2))
 
-	def Lorentz1d(self, width = 0.1):
+	def Lorentzian1d(self, width = 0.1):
 		a = self.tth
-		g = width
-		return lambda x: 1/(np.pi* g * ((x - a) / g)**2)
+		g = width/2
+		return lambda x: g/(np.pi* ((x - a)**2 + g**2))/(1/(np.pi*g))
 
-	def gen_peak(self):
-		if self.shape == 'Gauss1d':
-			self.peak_frame = self.Gauss1d(*self.args)
-		if self.shape == 'Lorentz1d':
-			self.peak_frame = self.Lorentz1d(*self.args)
+	def Gen_peak(self):
+		if self.shape == 'Gaussian1d':
+			self.peak_frame = self.Gaussian1d(*self.args)
+		if self.shape == 'Lorentzian1d':
+			self.peak_frame = self.Lorentzian1d(*self.args)
 
 	def frame(self, x):
 		return self.intn * self.peak_frame(x)
 
+	def show(self, start = 0, end = 90, precision = 0.01):
+		import matplotlib.pyplot as plt
+
+		fig = plt.figure()
+		ax = fig.gca()
+
+		x = np.linspace(start, end, (end - start)/ precision)
+		line, = ax.plot(x, self.frame(x))
+		ax.set(xlim = [start, end], title = 'peak', xlabel = '2theta (degree)', ylabel = 'Intensity (a. u.)')
+		plt.show()
+
+
 if __name__ == '__main__':
-	pass
+	p = Peak(tth = 30, peak_shape = 'Gaussian1d', peak_args = (2,))
+	p.show(20,50, 0.1)
