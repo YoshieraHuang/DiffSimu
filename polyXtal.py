@@ -34,10 +34,11 @@ class PolyXtal(object):
 		return self.lattice.d_spacing(hklfamilies)
 
 	def D_spacing(self, hklfamilies):
-		return FT.ndarrayfromiter(self.d_spacing(hklfamilies)) 
+		return FT.tolist(self.d_spacing(hklfamilies)) 
 
 if __name__ == '__main__':
 	Cu = LTTC.Lattice(material = 'Cu')
-	X = PolyXtal(Cu)
-	hkl = LTTC.Familyindex((2,0,0)), LTTC.Familyindex((3,3,1)), LTTC.Familyindex((3,1,1))
-	print(X.d_spacing(hkl))
+	Mg = LTTC.Lattice(material = 'Mg')
+	X = PolyXtal(Mg)
+	hkl = LTTC.Familyindex((1,0,0)), LTTC.Familyindex((0,0,2)), LTTC.Familyindex((1,0,1))
+	print(X.D_spacing(hkl))

@@ -6,6 +6,9 @@ import numpy as np
 import sys
 import logging
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+
+import myfunctools as FT
 
 class Xray(object):
 	'''
@@ -26,6 +29,7 @@ class Xray(object):
 				self.intensity = self.intensity[filt]
 				self.wavelength = self.wavelength[filt]
 				self.energy = self.energy[filt]
+			self.Gen_tag()
 			return
 
 		if wavelength is None:
@@ -47,6 +51,7 @@ class Xray(object):
 			if self.intensity.shape != self.wavelength.shape:
 				logging.error('Shape of intensity and wavelength do not match!')
 				raise ValueError
+		self.Gen_tag()
 
 	def lambda_from_energy(self, energy):
 		return 12.4144/energy
@@ -70,6 +75,8 @@ class Xray(object):
 		self.intensity = np.concatenate((self.intensity, np.array(intn)[None]))
 		if tag:
 			self.Add_tag(energy = energy)
+		if hasattr(self, 'inter_spectrum'):
+			del self.inter_spectrum
 
 	def Add_wavelength(self, wl, intn = 1, tag = True):
 		self.wavelength = np.concatenate((self.wavelength, np.array(wl)[None]))
@@ -77,6 +84,9 @@ class Xray(object):
 		self.intensity = np.concatenate((self.intensity, np.array(intn)[None]))
 		if tag:
 			self.Add_tag(wl = wl)
+
+		if hasattr(self, 'inter_spectrum'):
+			del self.inter_spectrum
 
 	def Add_tag(self, wl = None, energy = None):
 		def find_nearest_idx(arr, value):
@@ -115,6 +125,25 @@ class Xray(object):
 
 		idx_max = intn.argmax()
 		self.Add_tag(wl[idx_max])
+
+	def intn_wl(self, wl, EPS = 0):
+
+		idx = FT.where(self.wavelength, wl)
+		if idx:
+			return self.intensity[idx - 1]
+
+		if hasattr(self, 'inter_spectrum'):
+			f_intn = self.inter_spectrum
+		else:
+			f_intn = interp1d(self.wavelength, self.intensity, kind  = 'cubic')
+			self.inter_spectrum = f_intn
+
+		try:
+			intn = f_intn(wl)
+		except ValueError as e:
+			return 0
+
+		return 0 if intn < EPS else intn
 		
 	@property
 	def spectrum(self, islambda = True):
@@ -141,7 +170,7 @@ class Xray(object):
 			yy_tag = self.tag_wl_intn
 			plt.plot(xx_tag, yy_tag, 'o', mfc = 'none')
 			for x_tag, y_tag in zip(xx_tag, yy_tag):
-				plt.annotate(str(x_tag), xy = (x_tag, y_tag), ha = 'center', va = 'bottom')
+				plt.annotate('%.3f'%(x_tag), xy = (x_tag, y_tag), ha = 'center', va = 'bottom')
 		plt.title('Spectrum')
 		plt.xlabel(xlabel)
 		plt.ylabel('Intensity (a. u.)')
@@ -150,8 +179,9 @@ class Xray(object):
 if __name__ == '__main__':
 	# x = Xray(wavelength = np.arange(0.4, 0.5, 0.001))
 	x = Xray(filename = 'u18_gap12mm.txt', islambda = False, EPS = 1e12)
-	x.Gen_tag(range_wl = (0.3,0.1))
+	# x.Gen_tag(range_wl = (0.3,0.1))
 	# x = Xray(wavelength = 0.5)
-	x.Gen_tag()
+	# x.Gen_tag()
+	print(x.intn_wl(0.53, EPS = 1e10))
 	x.show()
 	

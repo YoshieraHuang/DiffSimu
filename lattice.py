@@ -6,7 +6,7 @@
 import numpy as np
 from scipy import linalg
 import sys
-import logging; logging.basicConfig(level = logging.INFO)
+import logging; logging.basicConfig(level = logging.DEBUG)
 import itertools
 import re
 
@@ -17,7 +17,7 @@ import myfunctools as FT
 
 # Parameters
 EPS = 1e-5
-EPS_sf = 1e-5
+EPS_sf = 1e-7
 re_elesym = re.compile(r'^\s*([A-Za-z]+)([+-]*|\d[+-]+)\s*$') # Regex for element name
 
 '''
@@ -38,20 +38,23 @@ class LatticeParameter(object):
 
 	def __init__(self, arr):
 		super(LatticeParameter, self).__init__()
+		logging.debug('input arr is %s'%(str(arr)))
 		if len(arr) == 6:
 			self.a, self.b, self.c, self.alpha, self.beta, self.gamma = arr[0], arr[1], arr[2], np.deg2rad(arr[3]), np.deg2rad(arr[4]), np.deg2rad(arr[5])
-		elif arr.shape == (3,3):
+		elif np.array(arr).shape == (3,3):
+			logging.debug('input matrix is %s'%(str(arr)))
 			va, vb, vc = arr
 			va, vb, vc = Vector(va), Vector(vb), Vector(vc)
 			self.a, self.b, self.c = va.length, vb.length, vc.length
 			self.alpha = vb.betweenangle_rad(vc)
 			self.beta = vc.betweenangle_rad(va)
 			self.gamma = va.betweenangle_rad(vb)
+		else:
+			raise ValueError('Unknown Parameters!')
 
 		logging.debug('lattice parameters = (%f %f %f %f %f %f)'%(self.a, self.b, self.c, np.rad2deg(self.alpha), np.rad2deg(self.beta), np.rad2deg(self.gamma)))
 		if not self.isvalid():
-			logging.error('lattice parameter is invalid!')
-			raise ValueError
+			raise Error('lattice parameter is invalid!')
 
 	def isvalid(self):
 		if self.a <= 0 or self.b <= 0 or self.c <= 0:
@@ -60,6 +63,47 @@ class LatticeParameter(object):
 		for angle in (self.alpha, self.beta, self.gamma):
 			if angle >= np.pi or angle <= 0:
 				return False
+		return True
+
+	def isorthogonal(self):
+		deg90 = np.pi/2
+		EPS_deg = 1e-5
+		if not FT.equal(self.alpha , deg90, EPS_deg):
+			return False
+		if not FT.equal(self.beta , deg90, EPS_deg):
+			return False
+		if not FT.equal(self.gamma , deg90, EPS_deg):
+			return False
+		return True
+
+	def iscubic(self):
+		EPS_a = 1e-4
+		if not self.isorthogonal():
+			return False
+
+		if not FT.equal(self.a , self.b, EPS_a):
+			return False
+
+		if not FT.equal(self.b , self.c, EPS_a):
+			return False
+
+		return True
+
+	def ishcp(self):
+		deg90 = np.pi/2
+		deg120 = np.deg2rad(120)
+		EPS_deg = 1e-5
+		EPS_a = 1e-4
+		if not FT.equal(self.alpha , deg90, EPS_deg):
+			return False
+		if not FT.equal(self.beta , deg90, EPS_deg):
+			return False
+		if not FT.equal(self.gamma , deg120, EPS_deg):
+			return False
+
+		if not FT.equal(self.a , self.b, EPS_a):
+			return False
+
 		return True
 
 	@property
@@ -89,14 +133,14 @@ class LatticeParameter(object):
 		self._reciprocal_matrix = m
 		return m
 
-	def report(self, fout = None):
+	def show(self, fout = None):
 		if fout != None:
 			printfile = functools.partial(print, file = fout)
 		else:
 			printfile = print
 
 		printfile('\ta = ', self.a, '\n\tb = ', self.b, '\n\tc = ',self.c)
-		printfile('\talpha = ', np.rad2deg(self.alpha), '\n\tbeta = ', np.rad2deg(self.beta), '\n\tgamma = ', np.rad2deg(self.gamma))
+		printfile('\talpha = ', np.rad2deg(self.alpha), '\n\tbeta  = ', np.rad2deg(self.beta), '\n\tgamma = ', np.rad2deg(self.gamma))
 
 
 
@@ -122,15 +166,14 @@ class Atom(object):
 
 
 class FracCoor(Vector):
-	def __new__(cls, input_array):
-		if len(input_array) != 3:
-			logging.error('Coordinates must be 3-dimensional!')
-			raise ValueError
-		if any((i < 0 or i > 1 for i in input_array)):
-			logging.error('Fractional coordinates must be 0~1!')
-			raise ValueError
+	def __new__(cls, coor):
+		if len(coor) != 3:
+			raise ValueError('Coordinates must be 3-dimensional!')
 
-		return np.asarray(input_array).view(cls)
+		if any((i < 0 or i > 1 for i in coor)):
+			raise ValueError('Fractional coordinates must be 0~1!')
+
+		return np.asarray(coor).view(cls)
 
 	@property
 	def x(self):
@@ -177,7 +220,7 @@ class Element(object):
 
 
 class Lattice(object):
-	def __init__(self, *, material = None, structure = None, args = None):
+	def __init__(self, material = None, structure = None, args = None):
 		super(Lattice, self).__init__()
 
 		self.LP = None
@@ -187,10 +230,10 @@ class Lattice(object):
 			if not material is None:
 				# material is input
 				structure, args = LUT.dict_material[material]
-				latp, atomsymbols = Replace_placeholder(LUT.dict_structure[structure], args)
+				latp, atomsymbols = Replace_placeholder(LUT.dict_structure[structure], args, diction = {})
 			else:
 				# structure and args is input
-				latp, atomsymbols = Replace_placeholder(LUT.dict_structure[structure], args)
+				latp, atomsymbols = Replace_placeholder(LUT.dict_structure[structure], args, diction = {})
 
 			self.Add_latticeparameters(LatticeParameter(latp))
 			for atomsymbol in atomsymbols[1:]:
@@ -202,8 +245,7 @@ class Lattice(object):
 
 	def Add_latticeparameters(self, latticeparam):
 		if not type(latticeparam) is LatticeParameter:
-			logging.error('argument should be type \'LatticeParameter\'')
-			raise TypeError
+			raise TypeError('argument should be type \'LatticeParameter\'')
 
 		if not self.LP is None:
 			logging.warning('the existing Lattice Parameters will be replaced!!')
@@ -213,13 +255,12 @@ class Lattice(object):
 
 	def Add_atom(self, atom):
 		if not type(atom) is Atom:
-			logging.error('argument should be type \'Atom\'')
-			raise TypeError
+			raise TypeError('argument should be type \'Atom\'')
 
 		self.atoms.append(atom)
 		logging.debug('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
 
-	def report(self):
+	def show(self):
 		self.LP.report()
 		for atom in self.atoms:
 			print("atom %s at %s"%(atom.element.name, str(atom.coor)))
@@ -241,7 +282,7 @@ class Lattice(object):
 			sf = 0
 			for atom in self.atoms:
 				kr = float(np.sum(atom.coor * hkl))
-				sf0 = np.exp(2j*np.pi*kr)
+				sf0 = atom.element.sc_factor_coeff[2] * np.exp(2j*np.pi*kr)
 				sf += sf0
 
 			if np.abs(sf) < EPS_sf:
@@ -310,7 +351,10 @@ class Lattice(object):
 			rcp_matrix = self.reciprocal_matrix
 
 		for hkl in hkls:
-			yield Vector(np.dot(hkl,rcp_matrix))
+			if hkl is None:
+				yield None
+			else:
+				yield Vector(np.dot(hkl,rcp_matrix))
 
 	def Vec_in_lattice(self, hkls, rcp_matrix = None):
 		return FT.tolist(self.vec_in_lattice(hkls, rcp_matrix))
@@ -341,12 +385,22 @@ class index(Vector):
 	def __new__(cls, input_array):
 
 		if len(input_array) != 3:
-			logging.error('index must be 3-dimensional!')
-			raise TypeError
-		if any((np.fabs(e - np.floor(e)) > EPS for e in input_array)):
-			logging.warning('Non-integer is input to hkl')
+			raise ValueError('Must be 3-dimension')
+		input_array = [int(i) for i in input_array]
 
 		return np.array(input_array).view(cls)
+
+	@property
+	def h(self):
+		return self[0]
+
+	@property
+	def k(self):
+		return self[1]
+
+	@property
+	def l(self):
+		return self[2]
 
 	@property
 	def str(self):
@@ -358,6 +412,21 @@ class Familyindex(index):
 		index of a family of lattice plane in a Xtal
 	'''
 
+	def __new__(cls, input_array, symmetry = None):
+		obj = super(Familyindex, cls).__new__(cls, input_array)
+		obj.symmetry = symmetry
+		return obj
+
+	def __array_finalize__(self, obj):
+		if obj is None: return
+		self.symmetry = getattr(obj, 'symmetry', None)
+
+	def add_sons(self, hkl):
+		if not hasattr(self, '_sons'):
+			self._sons = [hkl]
+		else:
+			self._sons.append(hkl)
+
 	def sons(self):
 		'''
 			give the sons of this family of lattice plane
@@ -365,15 +434,30 @@ class Familyindex(index):
 		if hasattr(self, '_sons'):
 			return self._sons
 
-		store = set()
-		perms = list(itertools.permutations(self, 3))
-		signs = list(itertools.product((1,-1),(1,-1),(1,-1)))
-		for perm in perms:
-			for sign in signs:
-				i = [p*s for p,s in zip(perm, sign)]
-				store.add(tuple(i))
-		self._sons = [index(s) for s in store]
-		return self._sons
+		if self.symmetry == 'cubic':
+			store = set()
+			perms = list(itertools.permutations(self, 3))
+			signs = list(itertools.product((1,-1),(1,-1),(1,-1)))
+			for perm in perms:
+				for sign in signs:
+					i = [int(p*s) for p,s in zip(perm, sign)]
+					store.add(tuple(i))
+			self._sons = [index(s) for s in store]
+			return self._sons
+
+		if self.symmetry == 'hcp':
+			store = set()
+			perms_elem = (self.h, self.k, -(self.h + self.k))
+			perms = list(itertools.permutations(perms_elem, 3))
+			for perm in perms:
+				i = (perm[0], perm[1], self.l)
+				store.add(i)
+				i = (perm[0], perm[1], -self.l)
+				store.add(i)
+			self._sons = [index(s) for s in store]
+			return self._sons
+
+		return ()
 
 	@property
 	def multiplicity(self):
@@ -423,47 +507,87 @@ def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
 		else:
 			return data, diction, i
 
-def Gen_hklfamilies(hklrange = (10,10,10), * , lattice = None):
+
+def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 	'''
 		give an array of hklfamilies from given range of index
 		NOTE:
 		This is a GENERATOR
 	'''
-	for h in range(hklrange[0] + 1):
-		for k in range(min(h, hklrange[1]) + 1):
-			for l in range(min(k, hklrange[2]) + 1):
-				if h == 0 and k == 0 and  l == 0:
-					continue
-				hkl = Familyindex((h,k,l))
-				if (lattice is None) or (not all(lattice.isextinct(hkl))):
-					yield hkl
+	if lattice is None:
+		hkls = Gen_hkls(hklrange = hklrange)
+		for hkl in hkls:
+			hklfamily = Familyindex(hkl)
+			hklfamily.add_sons(hkl)
+			yield hklfamily
+	else:
+
+		if lattice.LP.iscubic():
+			for h in range(hklrange[0] + 1):
+				for k in range(min(h, hklrange[1]) + 1):
+					for l in range(min(k, hklrange[2]) + 1):
+						if h == 0 and k == 0 and  l == 0:
+							continue
+						hklfamily = Familyindex((h,k,l), symmetry = 'cubic')
+						if not FT.tolist(lattice.isextinct(hklfamily)):
+							yield hklfamily
+
+		elif lattice.LP.ishcp():
+			for h in range(hklrange[0] + 1):
+				for k in range(min(h, hklrange[1]) + 1):
+					for l in range(hklrange[2] + 1):
+						if h == 0 and k == 0 and l == 0:
+							continue
+						hklfamily = Familyindex((h,k,l), symmetry = 'hcp')
+						if not FT.tolist(lattice.isextinct(hklfamily)):
+							yield hklfamily
+
+		else:
+			hkls = FT.tolist(Gen_hkls(hklrange = hklrange, lattice = None))
+			d_spacing = lattice.D_spacing(hkls)
+			d_spacing_0 = 0
+			EPS_d = 1e-5
+			for hkl,d_spacing in sorted(zip(hkls, d_spacing), key = lambda x: x[1], reverse = True):
+				if FT.equal(d_spacing, d_spacing_0, EPS_d):
+					hklfamily.add_sons(hkl)
+				else:
+					yield hklfamily
+					hklfamily = Familyindex(hkl)
+					hklfamily.add_sons(hkl)
+			yield hklfamily
 
 
-def Gen_hkls(hklfamilies):
+
+def Gen_hkls(hklrange = (10,10,10), lattice = None):
 	'''
 		give an array of hkl from given hklfamilies
 		NOTE:
 		This is a GENERATOR
 	'''
 
-	for hklfamily in hklfamilies:
-		for hkl in hklfamily.sons():
-			yield hkl
-
-
+	for h in range(-hklrange[0], hklrange[0] + 1):
+		for k in range(-hklrange[1], hklrange[1] + 1):
+			for l in range(-hklrange[2], hklrange[2] + 1):
+				if h == 0 and k == 0 and l == 0:
+					continue
+				hkl = index((h,k,l))
+				if (lattice is None) or (not FT.tolist(lattice.isextinct(hkl))):
+					yield hkl
 
 '''
 	TEST
 '''
 
 if __name__ == '__main__':
-	# l = Lattice(material = 'Cu')
-	# hkls = FT.tolist(Gen_hklfamilies((3,3,3), lattice = l))
-	# ds = l.d_spacing(hkls)
-	# fs = l.strct_factor(hkls)
-	# for hkl,d,f in zip(hkls,ds,fs):
-	# 	print(hkl,hkl.multiplicity, d,f)
+	l = Lattice(material = 'Mg')
+	l.LP.show()
+	hkls = FT.tolist(Gen_hklfamilies((3,3,3), lattice = l))
+	vs = l.vec_in_lattice(hkls)
+	ds = l.d_spacing(hkls)
+	for hkl,v, d in zip(hkls,vs, ds):
+		print(hkl,hkl.multiplicity,v, d)
 
+	# print(l.Vec_in_lattice((index((1,0,0)), index((0,1,0)), index((0,0,1)))))
 	# ele = Element('Cu')
 	# print(ele.sc_factor(np.deg2rad(30), 0.5))
-	print(index((0,0,-1)).str)
+	# print(index((0,0,-1)).str)

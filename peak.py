@@ -18,8 +18,6 @@ class Peak(object):
 
 	@tth.setter
 	def tth(self, v):
-		if not self.tth is None:
-			logging.debug('2theta will be changed!')
 		self._tth = v
 
 	@property
@@ -28,8 +26,6 @@ class Peak(object):
 
 	@gamma.setter
 	def gamma(self, v):
-		if not self.gamma is None:
-			logging.debug('gamma will be changed!')
 		self._gamma = v
 
 	@property
@@ -46,8 +42,6 @@ class Peak(object):
 
 	@intn.setter
 	def intn(self, v):
-		if not self.intn is None:
-			logging.debug('intensity will be changed!')
 		self._intn = v
 
 	@property

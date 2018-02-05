@@ -4,13 +4,15 @@
 
 import numpy as np
 import sys
-import logging; logging.basicConfig(level = logging.DEBUG)
+import logging; logging.basicConfig(level = logging.INFO)
 import itertools
+from scipy import linalg
 
 
 from pyquaternion import Quaternion
 import lattice as LTTC
 from Vec import Vector
+import myfunctools as FT
 EPS = 1e-5
 np.set_printoptions(precision = 5, suppress = True)
 
@@ -57,7 +59,9 @@ class SingleXtal(object):
 
 		if self.check_orientation():
 			logging.info('orientation is decided!')
-			self.Cal_rcp_matrix()
+			# self.Guess_rotation((Vector(0,0,1), Vector(1,0,0)), (self.vecz, self.vecx))
+			self.Guess_rotation((self.vecz, self.vecx), (Vector(0,0,1), Vector(1,0,0)))
+			self.Calc_rcp_matrix()
 		else:
 			logging.info('orientation is not decided!')
 
@@ -107,12 +111,12 @@ class SingleXtal(object):
 		else:
 			if self.indexx is None:
 				return None
-			self._vecx = self.lattice.Vec_in_lattice(self.indexx)
+			self._vecx = self.Vec_in_sx(self.indexx).norm
 			return self._vecx
 
 	@vecx.setter
 	def vecx(self, v):
-		logging.warning('vecx is changed!')
+		logging.debug('vecx is set as %s'%(str(v)))
 		self._vecx = v
 
 	@property
@@ -122,12 +126,12 @@ class SingleXtal(object):
 		else:
 			if self.indexy is None:
 				return None
-			self._vecy = self.lattice.Vec_in_lattice(self.indexy)
+			self._vecy = self.Vec_in_sx(self.indexy).norm
 			return self._vecy
 
 	@vecy.setter
 	def vecy(self, v):
-		logging.warning('vecy is changed!')
+		logging.debug('vecy is set as %s'%(str(v)))
 		self._vecy = v
 
 	@property
@@ -137,28 +141,36 @@ class SingleXtal(object):
 		else:
 			if self.indexz is None:
 				return None
-			self._vecz = self.lattice.Vec_in_lattice(self.indexz)
+			self._vecz = self.Vec_in_sx(self.indexz).norm
 			return self._vecz
 
 	@vecz.setter
 	def vecz(self, v):
-		logging.warning('vecz is changed!')
+		logging.debug('vecz is set as %s'%(str(v)))
 		self._vecz = v
+
+	@property
+	def index(self):
+		return (self.indexx, self.indexy, self.indexz)
+
+	@property
+	def vecs(self):
+		return (self.vecx, self.vecy, self.vecz)
 
 	def check_orientation(self):
 		'''
 			make sure that the orientation of single crystal is decided.
 			if decided, unknown direction will be calculated and True will be returned. if not, return False
 		'''
-		if self.orientation_decided:
-			return True 
 
-		vecs = (self.vecx, self.vecy, self.vecz)
+		vecs = self.vecs
 		number_of_None = 0
 		for vec in vecs:
 			if vec is None:
 				number_of_None += 1
+
 		logging.debug("number of None is %d"%(number_of_None))
+
 		if number_of_None in (2,3):
 			self.orientation_decided = False
 			return False
@@ -187,17 +199,17 @@ class SingleXtal(object):
 				else:
 					i2 = i
 
-			print(vecs)
-			vec_unknown = vecs[i1].cross(vecs[i2])
+			vec_unknown = vecs[i1].cross(vecs[i2]).norm
+
 			if i_None == 0:
 				self.vecx = vec_unknown
 			elif i_None == 1:
-				self.vecy = vec_unknown
+				self.vecy = - vec_unknown
 			else:
 				self.vecz = vec_unknown
 
 			if not vecs[i1].isperpendicular(vecs[i2]):
-				logging.warning('Existing two Vector are not perpendicular, one Vector is adjusted!')
+				logging.warning('Vector %s and %s are not perpendicular, one Vector is adjusted!'%(str(vecs[i1]), str(vecs[i2])))
 				vec_new = vecs[i2].cross(vec_unknown)
 				if i1 == 0:
 					self.vecx = vec_new
@@ -211,64 +223,128 @@ class SingleXtal(object):
 
 			return True
 
-	def Cal_rcp_matrix(self):
-		qua = Guess_rotation((Vector((0,0,1)), Vector((1,0,0))), (self.vecz, self.vecx))
-		self.reciprocal_matrix =  Rotate_vectors_by_qua(self.lattice.reciprocal_matrix, qua.inverse)
+	def Calc_rcp_matrix(self):
+		self.reciprocal_matrix = Rotate_vectors_by_qua(self.lattice.reciprocal_matrix, self.R)
 		logging.debug('reciprocal matrix is\n %s'%(self.reciprocal_matrix))
 
-	def direction(self, hkls):
-		return self.lattice.Vec_in_lattice(hkls, rcp_matrix = self.reciprocal_matrix)
+	@property
+	def reciprocal_matrix(self):
+		if not hasattr(self, '_reciprocal_matrix'):
+			self._reciprocal_matrix = Calc_reciprocal_vectors(self.direct_matrix)
+
+		return self._reciprocal_matrix
+
+	@reciprocal_matrix.setter
+	def reciprocal_matrix(self, m):
+		self._reciprocal_matrix = m
+		logging.debug('reciprocal matrix is set as %s'%(str(m)))
+		if hasattr(self, '_direct_matrix'):
+			del self._direct_matrix
+
+	@property
+	def direct_matrix(self):
+		if not hasattr(self, '_direct_matrix'):
+			self._direct_matrix = Calc_reciprocal_vectors(self.reciprocal_matrix)
+
+		return self._direct_matrix
+
+	@direct_matrix.setter
+	def direct_matrix(self, m):
+		self._direct_matrix = m
+		logging.debug('direct matrix is set as %s'%(str(m)))
+		if hasattr(self, '_reciprocal_matrix'):
+			del self._reciprocal_matrix
+
+	def vec_in_sx(self, hkls):
+		return self.lattice.vec_in_lattice(hkls, rcp_matrix = self.reciprocal_matrix)
+
+	def Vec_in_sx(self, hkls):
+		return FT.tolist(self.vec_in_sx(hkls))
+
+	def tthgam_rad(self, vec, z = None, x = None):
+		return vec.tthgam_rad(z = z, x = x)
+
+	def tthgam_deg(self, vec, *args):
+		return vec.tthgam_deg(*args)
+
+	def strain1d(self, axis = (1,0,0), index = None, ratio = 0):
+		if not index is None:
+			axis = self.Vec_in_sx(index).norm
+		else:
+			axis = Vector(axis).norm
+
+		vecs = []
+		for vec in self.direct_matrix:
+			d = vec.dot(axis)
+			vec_ = vec + axis * ratio * d
+			vecs.append(vec_)
+
+		self.lattice.Add_latticeparameters(LTTC.LatticeParameter(np.array(vecs)))
+		self.direct_matrix = vecs
+
+	def Guess_rotation(self, vsbefore, vsafter):
+		vbefore1, vafter1 = vsbefore[0].norm, vsafter[0].norm
+		if ((vafter1 - vbefore1).length < EPS):
+			axis1, angle1 = Vector((1,0,0)), 0
+		else:
+			axis1, angle1 = vbefore1.cross(vafter1), vbefore1.betweenangle_rad(vafter1)
+		qua1 = Quaternion(axis = axis1, angle = angle1).unit
+	
+		logging.debug("axis1 = %s, angle1 = %f"%(str(qua1.axis), qua1.degrees))
+		logging.debug("Residual = %s"%(str(vbefore1.rotate_by(qua1) - vafter1)))
+	
+		vbefore2, vafter2 = vsbefore[1].norm, vsafter[1].norm
+		vafterq1 = vbefore2.rotate_by(qua1)
+		if ((vafterq1 - vafter2).length < EPS):
+			axis2, angle2 = Vector((1,0,0)), 0
+		else:
+			axis2 = vafter1
+			angle2 = vafter2.cross(axis2).betweenangle_rad(vafterq1.cross(axis2))
+			if vafterq1.cross(vafter2).dot(axis2) < 0:
+				angle2 = -angle2
+		qua2 = Quaternion(axis = axis2, angle = angle2).unit
+	
+		logging.debug("axis2 = %s, angle2 = %f"%(str(qua2.axis), qua2.degrees))
+		logging.debug("Residual = %s"%(str(vafterq1.rotate_by(qua2) - vafter2)))
+	
+		qua = qua2 * qua1
+	
+		logging.debug("axis = %s, angle = %f"%(str(qua.axis), qua.degrees))
+		
+		self.R = qua
+
+	def rotate_by(self, q = None, axis = None, degrees = None):
+		if q is None:
+			if axis is None or degrees is None:
+				raise ValueError('Empty Parameters')
+			q = Quaternion(axis = axis, degrees = degrees)
+		logging.debug('rotation: axis = %s, degrees = %f'%(str(q.axis), q.degrees))
+		self.vecx = self.vecx.rotate_by(q)
+		self.vecy = self.vecy.rotate_by(q)
+		self.vecz = self.vecz.rotate_by(q)
+		self.R = q * self.R
+		self.reciprocal_matrix = Rotate_vectors_by_qua(self.reciprocal_matrix, q)
 
 
 '''
 	FUNCTION DEFINITION
 '''
+def Calc_reciprocal_vectors(v):
+	return np.vstack((np.cross(v[1],v[2]),np.cross(v[2],v[0]),np.cross(v[0],v[1])))/linalg.det(v)
 
-def Rotate_vectors_by_qua(Vector, qua):
-	return np.dot(Vector, qua.rotation_matrix.T)
-
-def Guess_rotation(vecBefore, vecAfter):
-	'''
-		Give rotation quaternion by two changes of Vector
-		Arguments:
-			vecBefore: array contains two Vector before the rotation
-			vecAfter: array contains two Vector after the rotation
-
-		Returns:
-			Quaternion
-	'''
-	logging.debug('vecBefore is %s, vecAfter is %s'%(str(vecBefore), str(vecAfter)))
-	vec1Before, vec1After = vecBefore[0], vecAfter[0]
-	if (Vector(vec1After - vec1Before).length < EPS):
-		qua1 = Quaternion()
-	else:
-		axis1, angle1 = vec1Before.cross(vec1After), vec1Before.betweenangle_rad(vec1After)
-		qua1 = Quaternion(axis = axis1, radians = angle1).unit
-
-	logging.debug('axis1 = %s, angle1 = %f'%(str(qua1.axis), qua1.degrees))
-
-	vec2AfterR1, vec2After = Rotate_vectors_by_qua(vecBefore[1], qua1), vecAfter[1]
-	if (Vector(vec2AfterR1 - vec2After).length < EPS):
-		qua2 = Quaternion()
-	else:
-		axis2 = vec1After
-		angle2 = vec2After.cross(axis2).betweenangle_rad(vec2AfterR1.cross(axis2))
-		if vec2AfterR1.cross(vec2After).dot(axis2) < 0:
-			angle2 = -angle2
-		qua2 = Quaternion(axis = axis2, radians = angle2).unit
-
-	logging.debug('axis2 = %s, angle2 = %f'%(str(qua2.axis), qua2.degrees))
-
-	qua = qua2 * qua1
-	logging.debug('axis = %s, angle2 = %f'%(str(qua.axis), qua.degrees))
-	logging.debug('Residual:\n %s'%(str(Rotate_vectors_by_qua(vecBefore,qua) - vecAfter)))
-	return qua
+def Rotate_vectors_by_qua(vs, qua):
+	return np.vstack(map(qua.rotate, vs))
 
 '''
 	TEST
 '''
 if __name__ == '__main__':
-	l = LTTC.Lattice(material = 'Cu')
-	sx = SingleXtal(l, z = LTTC.index((1,1,0)), x = LTTC.index((0,0,1)))
-	hkls = LTTC.index((0,1,0)), LTTC.index((1,1,0))
-	print(sx.direction(hkls))
+	l = LTTC.Lattice(material = 'Ta')
+	sx = SingleXtal(l, z = (1,1,1), x = (-1,1,0))
+	sx.lattice.LP.report()
+	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
+	# sx.lattice.LP.report()
+	# sx.strain1d(direction = (-1,1,0), ratio = 0.02)
+	# sx.strain1d(direction = (-1,-1,2), ratio = 0.02)
+	# sx.lattice.LP.report()
+	print(sx.Vec_in_sx((LTTC.index((1,1,1)), LTTC.index((-1,1,0)), LTTC.index((1,0,0)))))
