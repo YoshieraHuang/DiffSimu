@@ -51,7 +51,7 @@ class PolyXtal(object):
 
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(self.rcp_space_num))
-			f.writelines('index radius intn\n')
+			f.writelines('h k l radius intn\n')
 			for hklfamily, radius, strct_factor in self.rcp_space:
 				f.writelines('%s %f %f\n'%(hklfamily.str, radius, strct_factor))
 
@@ -72,7 +72,7 @@ class PolyXtal(object):
 		num = self.rcp_space_num*len(list(mesh_tthgam(tths,gammas)))
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(num))
-			f.writelines('index kx ky kz intn\n')
+			f.writelines('h k l tth gamma kx ky kz intn\n')
 			for hklfamily, radius, strct_factor in self.rcp_space:
 				for tth, gamma in mesh_tthgam(tths, gammas):
 					vec = Vector(tth = tth, gamma = gamma)

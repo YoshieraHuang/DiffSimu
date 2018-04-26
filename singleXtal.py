@@ -336,7 +336,7 @@ class SingleXtal(object):
 
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(self.rcp_space_num))
-			f.writelines('index kx ky kz\n')
+			f.writelines('h k l kx ky kz\n')
 			for hkl, vec in self.rcp_space:
 				f.writelines('%s %f %f %f\n'%(hkl.str, vec[0], vec[1], vec[2]))
 
