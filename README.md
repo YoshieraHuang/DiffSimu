@@ -264,7 +264,7 @@ Cu_lattice = Lattice(structure = 'fcc', args = (3.615, 'Cu'))
 * `show()`:
     - print abstract information of `Lattice`
 
-## Functions
+### Functions
 * `Gen_hklfamilies(hklrange = (10,10,10), lattice = None)`: `Generator`
     - Generate a series of `Familyindex`
     - `hklrange`: maximum of `index`. No negative values in `Familyindex`
@@ -279,7 +279,7 @@ Cu_lattice = Lattice(structure = 'fcc', args = (3.615, 'Cu'))
 
 ## Class `Xray`
 
-`Xray` describes x-ray. Monochromatic and Polychromatic x-ray both can be modeled
+`Xray` describes x-ray. Monochromatic and Polychromatic x-ray both are supported.  
 
 ### Initialization
 * from wavelength or energy or intensity:
@@ -313,3 +313,44 @@ import xray as XR
 xr1 = XR.Xray(filename = 'spectrum_wl.txt', islambda = True) # wavelength
 xr2 = XR.Xray(filename = 'spectrum_energy.txt', islambda = False) # energy
 ```
+### `tag` in `Xray`
+`tag` is a feature in `Xray`, which is used to mark positions of reflections of polycrystal by *pink* xray. When pink xray is diffracted by polycrystal, shape of reflections will be broad and assymetric. When one wavelength of xray is tagged, a peak related to this wavelength will be marked and abstract information will be shown.
+If xray is monochromatic, this wavelength will be tagged automatically. If xray is polychromatic, only a part of wavelength will be tagged. In principle, one wavelength with most intensity in a continuous part of wavelengthes will be tagged.
+
+### Attributes
+* `wavelength`:`np.ndarray`
+    - wavelengthes of xray
+* `energy`: `np.ndarray`
+    - energies of xray
+* `intensity`: `np.ndarray`
+    - intensities of xray for poly xray
+* `num_tag`:
+    - number of tag in `Xray`
+
+### Method
+* `lambda_from_energy(energy)`,`energy_from_lambda(wavelength)`:
+    - Convert energy to wavelength or convert wavelength to energy
+    - Note that wavelength is in *Wavelength* and energy *keV*
+    - `np.ndarray` can be input in order to convert a list of energies or wavelengthes
+
+* `Add_wavelength(wl, intn = 1, tag = True)`,`Add_energy(energy, intn = 1, tag = True)`:
+    - Add a wavelength or an energy with intensity `intn` into `Xray`
+    - if `tag` is `True`, this wavelength or energy will be tagged
+
+* `Add_tag(wl = None, energy = None)`:
+    - tag a wavelength `wl` or an energy `energy`
+    - Input value don't have to be accurate, when in a continuous xray. `Xray` will find the neareast value in existing spectrum and tag it
+* `Gen_tag(range_wl = None, range_energy = None)`:
+    - tag the value with most intensity in the range defined by `range_wl` or `range_energy`
+
+* `intn_wl(wl, EPS = 0)`:
+    - return the intensity of input wavelength `wl`
+    - If `wl` is not in the range of `wavelength`, return 0
+    - If `wl` is in the range of `wavelength` but not in `wavelength`, 1d interpolation will be used to determine the intensity. If 1d interpolation is failed to get the intensity or the intensity is below `EPS`, it will be thought that this wavelength is not in `Xray` and 0 will be returned
+
+* `show(islambda = True)`:
+    - plot wavelength or energy vs. intensity graph
+    - if `islambda` is True, wavelength vs. intensity graph will be plotted. If not, energy vs. intensity graph will be plotted
+
+* `save(filename, islambda = True)`:
+    - save spectrum to file
