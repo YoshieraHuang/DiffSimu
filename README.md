@@ -44,7 +44,7 @@ There are 8 main modules and 2 auxiliary modules.
 2. `myfunctools`: *abbr.* `FT`. Useful function tools
 
 ## Class `LatticeParameter`
-Lattice paramter $(a, b, c, \alpha , \beta , \gamma)$. Matrices that contains basis vectors in direct space and reciprocal space can calculated
+Lattice paramter (a, b, c, alpha , beta , gamma). Matrices that contains basis vectors in direct space and reciprocal space can calculated
 ### Initialization
 * from lattice parameters (6-element list)
 ```python
