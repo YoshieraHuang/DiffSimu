@@ -5,10 +5,9 @@
 # Dependencies
 
 ## Public Python modules
-* `numpy`[w](http://www.numpy.org/)
-* `scipy`[w](http://www.scipy.org)
-* `matplotlib`[w](https://matplotlib.org)
-* `multiprocessing` for multi processing
+* `numpy`[website](http://www.numpy.org/)
+* `scipy`[website](http://www.scipy.org)
+* `matplotlib`[website](https://matplotlib.org)
 * `logging`
 * `itertools`
 * `re` support for regex
@@ -16,14 +15,13 @@
 * `pyquaternion` for rotation calculation
 
 ## Private Python modules
-(may be included in this project)
 * `Vec` in which class `Vector` supports vecter operations
 
 ## Modules
 
 There are 8 main modules and 2 auxiliary modules.
 
-8 main modules:
+Main modules:
 1. `lattice` : *abbr.* `LTTC`. contains several attributes involved in **Crystallography** like
     * `LatticeParameter()`
     * `Element()`
@@ -39,7 +37,7 @@ There are 8 main modules and 2 auxiliary modules.
 7. `simu2d`: *abbr.* `S2D`. contains class `Pattern2D` which simulates pattern of **Laue diffraction**
 8. `detector`: *abbr.* `DET`. contains class `Detector` which models **detector**. According to the geometry of diffraction and detector, diffraction pattern on detector can be simulated
 
-2 auxiliary modules:
+Auxiliary modules:
 1. `LUT`: "Look-Up Table". Datebase in diffraction simulation
 2. `myfunctools`: *abbr.* `FT`. Useful function tools
 
@@ -67,8 +65,14 @@ LP = LTTC.LatticeParameters(DirectMatrix)
 * `direct_matrix`: `np.ndarray`, read-only
     - Matrix contains basis vectors in real space. Note that the vectors are vertical
 
-* `reciprocal_matrix`: `np.ndarray`, read-only
+* `rcp_matrix`: `np.ndarray`, read-only
     - Matrix contains basis vectors in reciprocal space
+
+* `isvalid`: `bool`
+    - When all lattice parameters are valid, return `True`
+
+* `isorthogonal`, `iscubic`, `ishcp`: `bool`
+    - According to lattice parameters, estimate this lattice is orthogonal, cubic or hcp
 
 ### Methods
 * `show(fout = None)`: No return
@@ -92,12 +96,12 @@ FC = LTTC.FracCoor((0.5,0.5,0.5))
 
 * `x`, `y`, `z`: `float`
     - x-, y- and z- coordinates.
-    - is same as `FC[0]`, `FC[1]` and `FC[2]`
+    - same as `FC[0]`, `FC[1]` and `FC[2]`
 
 
 ## Class `Element`
 
-`Element` is a class for atom element.
+`Element` is a class for elements.
 
 ### Initialization
 * from name:
@@ -107,7 +111,7 @@ Cu = LTTC.Element('Cu')
 O = LTTC.Element('O')
 ```
 
-* Input name will be regularized. Expressions like `Element('cu')` and `Element('o')` are allowed
+* Input name of element will be regularized by method `reg`. Expressions like `Element('cu')` and `Element('o')` are allowed
 * Then coefficients of scattering factor of this element will be searched in dictionary `LUT.dict_element` and stored into attribute `sc_factor_coeff`
 
 ### Attributes
@@ -120,8 +124,10 @@ O = LTTC.Element('O')
     - **scattering factor** when x-ray with wavelength `wl` be scattered to angle `tth`
     - `wl`: wavelength in *Angstrom*
     - `tth`: $2\theta$, scattering angle in *radian*
+* `reg(name)`: `string`
+    - Regularize input `name`
 
-### Class `Atom`
+## Class `Atom`
 
 `Atom` can describe atom in unit cell.
 
@@ -145,10 +151,10 @@ atom4 = LTTC.Atom(Cu, FC)
 
 ## Class `index`
 
-`index` is Miller index of lattice plane. inherit from `Vector`
+`index` is Miller index of lattice plane. inherited from `Vector`
 
 ### Initialization
-* from 3D integer list:
+* from list containing three integers:
 ```python
 import lattice as LTTC
 hkl = LTTC.index((1,1,1))
@@ -160,7 +166,7 @@ hkl = LTTC.index((1,1,1))
     - same as `index()[0]`, `index()[1]` and `index()[2]`
 
 * `str`: `string`
-    - traditional representation of `index`, *hkl*
+    - traditional representation of `index`, *h k l*
 
 ## Class `Familyindex`
 
@@ -175,9 +181,9 @@ hkl = LTTC.index((1,1,1))
 
 ### New Method
 * `sons()`: list of `index`
-    - sons of this family. No duplicates.
+    - sons of this family.
 
-### Class `Lattice`
+## Class `Lattice`
 
 `Lattice` is a class of crystal lattice that contains lattice parameters and atoms
 
@@ -201,8 +207,8 @@ Cu_lattice = Lattice(structure = 'fcc', args = (3.615, 'Cu'))
 * `atoms`:
     - list of `Atom` in `Lattice`
 
-* `reciprocal_matrix`:
-    - same as `Lattice.LP.reciprocal_matrix`
+* `rcp_matrix`:
+    - same as `Lattice.LP.rcp_matrix`
 
 ### Methods
 * `Add_latticeparameters(latticeparam)`:
@@ -213,33 +219,39 @@ Cu_lattice = Lattice(structure = 'fcc', args = (3.615, 'Cu'))
     - add `atom` to `Lattice.atoms`
     - `atom`: `Atom`
 
-* `strct_factor(hkls)`: Generator
-    - return **structure factor**(complex) in `Lattice` for each `index` in `hkls`. If structure factor is zero, return `None`
+* `strct_factor(hkl)`:
+    - return **structure factor**(complex) of `hkl`. If structure factor is zero, return `None`
     - For simplification, not all coefficients of scattering factor is considered. It's only recommamded to confirm whether `index` is structurally extinct or not.
+    - `hkl`: an instance of `index`.
+  
+* `Gen_strct_factor(hkls)`: `Generator`
+    - return a generator containing `strct_factor()` for each `index` in `hkls`
     - `hkls`: list or generator of `index`
 
 * `sc_factor(hkl, tth, wl)`:
     - return **scattering factor** in `Lattice` for `hkl`. if scattering factor is zero , return `None`
-    - Whole scattering factor is considered.
+    - All scattering factors of elements are considered.
     - `hkl`: `index`
     - `tth`: $2\theta$, scattering angle in *radian*
     - `wl`: wavelength in *Angstrom*
 
-* `isextinct(hkls)`: Generator
-    - for each `index` in `hkls`, if `index` is structurally extinct, return `True`, else return `False`
+* `isextinct(hkl)`: `bool`
+    - if `index` is structurally extincted, return `True`.
 
-* `vec_in_lattice(hkls, rcp_matrix = None)`: Generator
-    - for each `index` in `hkls`, return **reciprocal vectors** in `Lattice`. if `index` is `None`, return `None`
-    - Reciprocal vector is calculated by `Lattice.reciprocal_matrix`. if `rcp_matrix` is assigned, `rcp_matrix` will be used to calculate reciprocal vector.
-* `Vec_in_lattice(hkls, rcp_matrix = None)`:
-    - return *list* of **reciprocal vectors** from generator `vec_in_lattice`
-    - If `hkls` has only one `index`, corresponding reciprocal vector, not a list, will be returned
+* `vec_in_rcp(hkl, rcp_matrix = None)`: `Vector`
+    - return **reciprocal vector** of `hkl` in `Lattice`. if `index` is `None`, return `None`
+    - `hkl`: `index`
+    - `rcp_matrix`: reciprocal matrix used to calculate reciprocal vector. `Lattice.rcp_matrix` will be used by defaut 
 
-* `d_spacing(hkls)`: Generator
-    - return *d_spacing* in `Lattice` for each `index` in `hkls`
+* `Gen_vec_in_rcp(hkls, rcp_matrix = None)`: `Generator`
+    - return **reciprocal vectors** of `hkls`
+    - `hkls`: a list or a generator of `index`
 
-* `D_spacing(hkls)`:
-    - list version of `d_spacing()`
+* `d_spacing(hkl)`:
+    - return *d_spacing* of `hkl` in `Lattice`
+
+* `Gen_d_spacing(hkls)`: `Generator`
+    - return generator containing d_spacings of `hkls`
 
 * `isperpendicular(hkl1, hkl2)`:
     - If `hkl1` and `hkl2` is perpendicular in `Lattice`, return `True`, else return `False`
@@ -250,16 +262,20 @@ Cu_lattice = Lattice(structure = 'fcc', args = (3.615, 'Cu'))
     - `hkl1`, `hkl2`: `index`
 
 * `show()`:
-    - print abstract view of `Lattice`
+    - print abstract information of `Lattice`
 
-## Functions in `Lattice`
-* `Gen_hklfamilies(hklrange = (10,10,10), lattice = None)`: Generator
+## Functions
+* `Gen_hklfamilies(hklrange = (10,10,10), lattice = None)`: `Generator`
     - Generate a series of `Familyindex`
-    - `hklrange`: maximum of `index`
+    - `hklrange`: maximum of `index`. No negative values in `Familyindex`
     - `lattice`: instance of `Lattice`
-        + if `lattice` is not `None`, `Familyindex` that is structurally extinct in `lattice` will be filtered off
-* `Gen_hkls(hklfamilies)`: Generator
-    - Generate `index` belonging to `hklfamilies`
+        + if `lattice` is not `None`, `Familyindex` that is structurally extincted in `lattice` will be filtered off
+
+* `Gen_hkls(hklrange = (10,10,10), lattice = None)`: `Generator`
+    - Generate a series of `index`
+    - `hklrange`: maximum of absolute value of each elements of `index`
+    - `lattice`: instance of `Lattice`
+        + if `lattice` is not `None`, `Familyindex` that is structurally extincted in `lattice` will be filtered off
 
 ## Class `Xray`
 

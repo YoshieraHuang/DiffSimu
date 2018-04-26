@@ -304,7 +304,7 @@ class Lattice(object):
 		
 		if isinstance(hkl, Familyindex):
 			sf = hkl.multiplicity*sf
-			
+
 		logging.debug('The Structure Factor of %s is %r\n'%(str(hkl), sf))
 		return sf	
 	
@@ -525,7 +525,7 @@ def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
 			return data, diction, i
 
 
-def Gen_hklfamilies(hklrange = (5,5,5), lattice = None):
+def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 	'''
 		give an array of hklfamilies from given range of index
 		NOTE:

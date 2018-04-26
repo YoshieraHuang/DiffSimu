@@ -43,20 +43,22 @@ class PolyXtal(object):
 		if sorting:
 			hklfamilies = sorted(hklfamilies, key = self.d_spacing, reverse = True)
 		self.rcp_space_num = len(hklfamilies)
-		self.rcp_space = zip(hklfamilies, [1/d for d in self.Gen_d_spacing(hklfamilies)], list(self.Gen_intn(hklfamilies)))
+		self.rcp_space_hkls = hklfamilies
+		self.rcp_space_d = [1/d for d in self.Gen_d_spacing(hklfamilies)]
+		self.rcp_space_intn = list(self.Gen_intn(hklfamilies))
 
 	def Save_simple_rcp_space(self, filename):
-		if not hasattr(self, 'rcp_space'):
+		if not hasattr(self, 'rcp_space_num'):
 			raise ValueError('No rcp_space')
 
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(self.rcp_space_num))
 			f.writelines('h k l radius intn\n')
-			for hklfamily, radius, strct_factor in self.rcp_space:
+			for hklfamily, radius, strct_factor in zip(self.rcp_space_hkls, self.rcp_space_d, self.rcp_space_intn):
 				f.writelines('%s %f %f\n'%(hklfamily.str, radius, strct_factor))
 
 	def Save_rcp_space(self, filename, res_tth = 0.1, res_gamma = 0.1):
-		if not hasattr(self, 'rcp_space'):
+		if not hasattr(self, 'rcp_space_num'):
 			raise ValueError('No rcp_space')
 
 		def mesh_tthgam(tths, gammas):
@@ -72,12 +74,12 @@ class PolyXtal(object):
 		num = self.rcp_space_num*len(list(mesh_tthgam(tths,gammas)))
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(num))
-			f.writelines('h k l tth gamma kx ky kz intn\n')
-			for hklfamily, radius, strct_factor in self.rcp_space:
+			f.writelines('h k l kx ky kz intn\n')
+			for hklfamily, radius, strct_factor in zip(self.rcp_space_hkls, self.rcp_space_d, self.rcp_space_intn):
 				for tth, gamma in mesh_tthgam(tths, gammas):
 					vec = Vector(tth = tth, gamma = gamma)
 					# print(tth, gamma, vec, radius)
-					f.writelines('%s %f %f %f %f %f %f\n'%(hklfamily.str, tth, gamma, radius*vec[0], radius*vec[1], radius*vec[2], strct_factor))
+					f.writelines('%s %f %f %f %f\n'%(hklfamily.str, radius*vec[0], radius*vec[1], radius*vec[2], strct_factor))
 
 
 if __name__ == '__main__':

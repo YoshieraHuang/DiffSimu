@@ -327,17 +327,18 @@ class SingleXtal(object):
 
 	def Calc_rcp_space(self, hklrange):
 		hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
-		self.rcp_space = zip(hkls, self.Gen_vec_in_rcp(hkls))
+		self.rcp_space_hkls = hkls
+		self.rcp_space_vec = list(self.Gen_vec_in_rcp(hkls))
 		self.rcp_space_num = len(hkls)
 
 	def Save_rcp_space(self, filename):
-		if not hasattr(self, 'rcp_space'):
-			raise ValueError('No reicprocal space')
+		if not hasattr(self, 'rcp_space_num'):
+			raise ValueError('No rcp_space')
 
 		with open(filename, 'w') as f:
 			f.writelines('%d\n'%(self.rcp_space_num))
 			f.writelines('h k l kx ky kz\n')
-			for hkl, vec in self.rcp_space:
+			for hkl, vec in zip(self.rcp_space_hkls, self.rcp_space_vec):
 				f.writelines('%s %f %f %f\n'%(hkl.str, vec[0], vec[1], vec[2]))
 
 	def copy(self):
@@ -359,7 +360,7 @@ if __name__ == '__main__':
 	l = LTTC.Lattice(material = 'Cu')
 	sx = SingleXtal(l, z = (0,0,1), x = (1,0,0))
 	sx.Calc_rcp_space((15,15,15))
-	sx.Save_rcp_space('rcp.dat')
+	sx.Save_rcp_space('rcp2.dat')
 	# print(sx.vecs,sx.R,sx.rcp_matrix)
 	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
 	# sx.lattice.LP.report()
