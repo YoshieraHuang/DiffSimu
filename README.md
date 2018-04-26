@@ -296,4 +296,4 @@ xr2 = XR.Xray(energy = np.linspace(20, 25, 100)) # Poly
 import xray as XR
 xr1 = XR.Xray(filename = 'spectrum_wl.txt', islambda = True) # wavelength
 xr2 = XR.Xray(filename = 'spectrum_energy.txt', islambda = False) # energy
-```
+```# DiffSimu
