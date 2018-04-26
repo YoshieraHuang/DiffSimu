@@ -6,9 +6,10 @@
 import numpy as np
 from scipy import linalg
 import sys
-import logging; logging.basicConfig(level = logging.DEBUG)
+import logging; logging.basicConfig(level = logging.INFO)
 import itertools
 import re
+import types
 
 # My modules
 import LUT
@@ -30,7 +31,7 @@ class LatticeParameter(object):
 		Attributes:
 			a,b,c,alpha,beta,gamma: six lattice parameters
 			direct_matrix: the direct matrix of lattice
-			reciprocal_matrix: the reciprocal matrix of lattice
+			rcp_matrix: the reciprocal matrix of lattice
 
 		Methods:
 			report(): show the informations of LatticeParamter
@@ -121,16 +122,16 @@ class LatticeParameter(object):
 		return m
 
 	@property
-	def reciprocal_matrix(self):
-		if hasattr(self, '_reciprocal_matrix'):
-			return self._reciprocal_matrix
+	def rcp_matrix(self):
+		if hasattr(self, '_rcp_matrix'):
+			return self._rcp_matrix
 
-		def Calc_reciprocal_vectors(v):
+		def Calc_rcp_vectors(v):
 			return np.vstack((np.cross(v[1],v[2]),np.cross(v[2],v[0]),np.cross(v[0],v[1])))/linalg.det(v)
-		m = Calc_reciprocal_vectors(self.direct_matrix)
+		m = Calc_rcp_vectors(self.direct_matrix)
 
 		logging.debug('Reciprocal matrix is\n %s'%(str(m)))
-		self._reciprocal_matrix = m
+		self._rcp_matrix = m
 		return m
 
 	def show(self, fout = None):
@@ -265,31 +266,47 @@ class Lattice(object):
 		for atom in self.atoms:
 			print("atom %s at %s"%(atom.element.name, str(atom.coor)))
 
-	def strct_factor(self, hkls):
+	def Gen_strct_factor(self, hkls):
 		'''
-		 	Structure factor for one or a group of hkl
+		 	Generator
+		 	Structure factor for a group of hkl
 		 	Note: scattering factors of all elements is considered as 1
 		 		if real scattering factors should be considered, please refer to function sc_factor() 
 		'''
-		if len(self.atoms) == 0:
-			logging.error('No atoms in Lattice!')
-			raise ValueError
-
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
 
 		for hkl in hkls:
-			sf = 0
-			for atom in self.atoms:
-				kr = float(np.sum(atom.coor * hkl))
-				sf0 = atom.element.sc_factor_coeff[2] * np.exp(2j*np.pi*kr)
-				sf += sf0
+			yield self.strct_factor(hkl)
 
-			if np.abs(sf) < EPS_sf:
-				sf = None
+	def strct_factor(self, hkl):
+		'''
+			Structure factor for one hkl
+			If hkl is Familyindex(), multiplicity is considered
+			Note: scattering factors of all elements is considered as 1
+		 		if real scattering factors should be considered, please refer to function sc_factor()
+		'''
+		if not isinstance(hkl, index):
+			raise ValueError('Not index')
+		if len(self.atoms) == 0:
+			logging.error('No atoms in Lattice!')
+			raise ValueError
+
+		sf = 0
+		for atom in self.atoms:
+			kr = float(np.sum(atom.coor * hkl))
+			sf0 = atom.element.sc_factor_coeff[2] * np.exp(2j*np.pi*kr)
+			sf += sf0
+
+		if np.abs(sf) < EPS_sf:
+			logging.debug('The Structure Factor of %s is %r, too small\n'%(str(hkl), sf))
+			return None
+		
+		if isinstance(hkl, Familyindex):
+			sf = hkl.multiplicity*sf
 			
-			logging.debug('The Structure Factor of %s is %r\n'%(str(hkl), sf))
-			yield sf
+		logging.debug('The Structure Factor of %s is %r\n'%(str(hkl), sf))
+		return sf	
 	
 	def sc_factor(self, hkl, tth, wl):
 		'''
@@ -314,50 +331,50 @@ class Lattice(object):
 
 
 	@property
-	def reciprocal_matrix(self):
-		return self.LP.reciprocal_matrix
+	def rcp_matrix(self):
+		return self.LP.rcp_matrix
 
-	def isextinct(self, hkls):
+	def isextinct(self, hkl):
 		'''
 			Return True when this hkl is structurally extinct
 		'''
-		for sta in self.strct_factor(hkls):
-			if sta is None:
-				yield True
-			else:
-				yield False
+		sta = self.strct_factor(hkl)
+		return True if sta is None else False
 
-	def d_spacing(self, hkls):
+	def Gen_d_spacing(self, hkls):
 		'''
+			Generator
 			return the d-spacing of one or a group of given hkls
 			if hkl is extinct, None will be returned 
 		'''
 
-		for vec in self.vec_in_lattice(hkls):
+		for vec in self.Gen_vec_in_rcp(hkls):
 			yield 1/vec.length
 
-	def D_spacing(self, hkls):
-		return FT.tolist(self.d_spacing(hkls))
+	def d_spacing(self, hkl):
+		'''
+			only for one index
+		'''
+		return 1/(self.vec_in_rcp(hkl).length)
 
-	def vec_in_lattice(self , hkls, rcp_matrix = None):
+	def Gen_vec_in_rcp(self , hkls, rcp_matrix = None):
 		'''
 			transform index to Vector in lattice orthogonal frame 
 		'''
-
 		if isinstance(hkls, index):
 			hkls = hkls[None,:]
 
-		if rcp_matrix is None:
-			rcp_matrix = self.reciprocal_matrix
-
 		for hkl in hkls:
-			if hkl is None:
-				yield None
-			else:
-				yield Vector(np.dot(hkl,rcp_matrix))
+			yield self.vec_in_rcp(hkl, rcp_matrix = rcp_matrix)
 
-	def Vec_in_lattice(self, hkls, rcp_matrix = None):
-		return FT.tolist(self.vec_in_lattice(hkls, rcp_matrix))
+	def vec_in_rcp(self, hkl, rcp_matrix = None):
+		if hkl is None:
+			return None
+
+		if rcp_matrix is None:
+			rcp_matrix = self.rcp_matrix
+
+		return Vector(np.dot(hkl, rcp_matrix))
 
 	def isperpendicular(self, hkl1, hkl2):
 		'''
@@ -365,7 +382,7 @@ class Lattice(object):
 			else return False 
 		'''
 
-		vec1, vec2 = self.Vec_in_lattice(hkl1), self.Vec_in_lattice(hkl2)
+		vec1, vec2 = self.vec_in_rcp(hkl1), self.vec_in_rcp(hkl2)
 		return vec1.isperpendicular(vec2)
 
 	def isparallel(self, hkl1, hkl2):
@@ -374,7 +391,7 @@ class Lattice(object):
 			if reverse-parallel, return 2;
 			else return 0
 		'''
-		vec1, vec2 = self.Vec_in_lattice(hkl1), self.Vec_in_lattice(hkl2)
+		vec1, vec2 = self.vec_in_rcp(hkl1), self.vec_in_rcp(hkl2)
 		return vec1.isparallel(vec2)
 
 
@@ -404,7 +421,7 @@ class index(Vector):
 
 	@property
 	def str(self):
-		return str(self[0]) + str(self[1]) + str(self[2])
+		return str(self[0]) + ' ' + str(self[1]) + ' ' + str(self[2])
 
 
 class Familyindex(index):
@@ -508,7 +525,7 @@ def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
 			return data, diction, i
 
 
-def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
+def Gen_hklfamilies(hklrange = (5,5,5), lattice = None):
 	'''
 		give an array of hklfamilies from given range of index
 		NOTE:
@@ -529,7 +546,7 @@ def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 						if h == 0 and k == 0 and  l == 0:
 							continue
 						hklfamily = Familyindex((h,k,l), symmetry = 'cubic')
-						if not FT.tolist(lattice.isextinct(hklfamily)):
+						if not lattice.isextinct(hklfamily):
 							yield hklfamily
 
 		elif lattice.LP.ishcp():
@@ -539,7 +556,7 @@ def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 						if h == 0 and k == 0 and l == 0:
 							continue
 						hklfamily = Familyindex((h,k,l), symmetry = 'hcp')
-						if not FT.tolist(lattice.isextinct(hklfamily)):
+						if not lattice.isextinct(hklfamily):
 							yield hklfamily
 
 		else:
@@ -564,14 +581,16 @@ def Gen_hkls(hklrange = (10,10,10), lattice = None):
 		NOTE:
 		This is a GENERATOR
 	'''
+	def sorted_range(end):
+		return sorted(range(-end, end+1), key = abs)
 
-	for h in range(-hklrange[0], hklrange[0] + 1):
-		for k in range(-hklrange[1], hklrange[1] + 1):
-			for l in range(-hklrange[2], hklrange[2] + 1):
+	for h in sorted_range(hklrange[0]):
+		for k in sorted_range(hklrange[1]):
+			for l in sorted_range(hklrange[2]):
 				if h == 0 and k == 0 and l == 0:
 					continue
 				hkl = index((h,k,l))
-				if (lattice is None) or (not FT.tolist(lattice.isextinct(hkl))):
+				if (lattice is None) or (not lattice.isextinct(hkl)):
 					yield hkl
 
 '''
@@ -579,14 +598,14 @@ def Gen_hkls(hklrange = (10,10,10), lattice = None):
 '''
 
 if __name__ == '__main__':
-	l = Lattice(material = 'Mg')
-	l.LP.show()
-	hkls = FT.tolist(Gen_hklfamilies((3,3,3), lattice = l))
-	vs = l.vec_in_lattice(hkls)
-	ds = l.d_spacing(hkls)
-	for hkl,v, d in zip(hkls,vs, ds):
-		print(hkl,hkl.multiplicity,v, d)
-
+	# l = Lattice(material = 'Mg')
+	# l.LP.show()
+	# hkls = FT.tolist(Gen_hklfamilies((3,3,3), lattice = l))
+	# vs = l.vec_in_lattice(hkls)
+	# ds = l.d_spacing(hkls)
+	# for hkl,v, d in zip(hkls,vs, ds):
+	# 	print(hkl,hkl.multiplicity,v, d)
+	hkls = FT.tolist(Gen_hkls((3,3,3)))
 	# print(l.Vec_in_lattice((index((1,0,0)), index((0,1,0)), index((0,0,1)))))
 	# ele = Element('Cu')
 	# print(ele.sc_factor(np.deg2rad(30), 0.5))

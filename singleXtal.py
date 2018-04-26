@@ -7,7 +7,7 @@ import sys
 import logging; logging.basicConfig(level = logging.INFO)
 import itertools
 from scipy import linalg
-
+import copy
 
 from pyquaternion import Quaternion
 import lattice as LTTC
@@ -29,7 +29,7 @@ class SingleXtal(object):
 			vecx, vecy, vecz: Vector in crystal at the direction in x-, y- and z-axis of lab frame;
 				z is reverse-parallel to incident direction of x-ray; y is horizontal and x is verticle
 				These Vectors are able to be set by value, which, however, are not recommanded
-			reciprocal_matrix: reciprocal matrix of this single crystal, including the information of orientation 
+			rcp_matrix: reciprocal matrix of this single crystal, including the information of orientation 
 		Method:
 			check_orientation(): check whether the orientation of single crystal is decided.
 			direction(index): the direction of given index in lab coordinates
@@ -55,7 +55,7 @@ class SingleXtal(object):
 			self.indexz = z
 
 		self.orientation_decided = False
-		self.reciprocal_matrix = self.lattice.reciprocal_matrix
+		self.rcp_matrix = self.lattice.rcp_matrix
 
 		if self.check_orientation():
 			logging.info('orientation is decided!')
@@ -111,7 +111,7 @@ class SingleXtal(object):
 		else:
 			if self.indexx is None:
 				return None
-			self._vecx = self.Vec_in_sx(self.indexx).norm
+			self._vecx = self.vec_in_rcp(self.indexx).norm
 			return self._vecx
 
 	@vecx.setter
@@ -126,7 +126,7 @@ class SingleXtal(object):
 		else:
 			if self.indexy is None:
 				return None
-			self._vecy = self.Vec_in_sx(self.indexy).norm
+			self._vecy = self.vec_in_rcp(self.indexy).norm
 			return self._vecy
 
 	@vecy.setter
@@ -141,7 +141,7 @@ class SingleXtal(object):
 		else:
 			if self.indexz is None:
 				return None
-			self._vecz = self.Vec_in_sx(self.indexz).norm
+			self._vecz = self.vec_in_rcp(self.indexz).norm
 			return self._vecz
 
 	@vecz.setter
@@ -224,19 +224,19 @@ class SingleXtal(object):
 			return True
 
 	def Calc_rcp_matrix(self):
-		self.reciprocal_matrix = Rotate_vectors_by_qua(self.lattice.reciprocal_matrix, self.R)
-		logging.debug('reciprocal matrix is\n %s'%(self.reciprocal_matrix))
+		self.rcp_matrix = Rotate_vectors_by_qua(self.lattice.rcp_matrix, self.R)
+		logging.debug('reciprocal matrix is\n %s'%(self.rcp_matrix))
 
 	@property
-	def reciprocal_matrix(self):
-		if not hasattr(self, '_reciprocal_matrix'):
-			self._reciprocal_matrix = Calc_reciprocal_vectors(self.direct_matrix)
+	def rcp_matrix(self):
+		if not hasattr(self, '_rcp_matrix'):
+			self._rcp_matrix = Calc_reciprocal_vectors(self.direct_matrix)
 
-		return self._reciprocal_matrix
+		return self._rcp_matrix
 
-	@reciprocal_matrix.setter
-	def reciprocal_matrix(self, m):
-		self._reciprocal_matrix = m
+	@rcp_matrix.setter
+	def rcp_matrix(self, m):
+		self._rcp_matrix = m
 		logging.debug('reciprocal matrix is set as %s'%(str(m)))
 		if hasattr(self, '_direct_matrix'):
 			del self._direct_matrix
@@ -244,7 +244,7 @@ class SingleXtal(object):
 	@property
 	def direct_matrix(self):
 		if not hasattr(self, '_direct_matrix'):
-			self._direct_matrix = Calc_reciprocal_vectors(self.reciprocal_matrix)
+			self._direct_matrix = Calc_reciprocal_vectors(self.rcp_matrix)
 
 		return self._direct_matrix
 
@@ -252,14 +252,14 @@ class SingleXtal(object):
 	def direct_matrix(self, m):
 		self._direct_matrix = m
 		logging.debug('direct matrix is set as %s'%(str(m)))
-		if hasattr(self, '_reciprocal_matrix'):
-			del self._reciprocal_matrix
+		if hasattr(self, '_rcp_matrix'):
+			del self._rcp_matrix
 
-	def vec_in_sx(self, hkls):
-		return self.lattice.vec_in_lattice(hkls, rcp_matrix = self.reciprocal_matrix)
+	def Gen_vec_in_rcp(self, hkls):
+		return self.lattice.Gen_vec_in_rcp(hkls, rcp_matrix = self.rcp_matrix)
 
-	def Vec_in_sx(self, hkls):
-		return FT.tolist(self.vec_in_sx(hkls))
+	def vec_in_rcp(self, hkl):
+		return self.lattice.vec_in_rcp(hkl, rcp_matrix = self.rcp_matrix)
 
 	def tthgam_rad(self, vec, z = None, x = None):
 		return vec.tthgam_rad(z = z, x = x)
@@ -269,7 +269,7 @@ class SingleXtal(object):
 
 	def strain1d(self, axis = (1,0,0), index = None, ratio = 0):
 		if not index is None:
-			axis = self.Vec_in_sx(index).norm
+			axis = self.vec_in_rcp(index).norm
 		else:
 			axis = Vector(axis).norm
 
@@ -313,18 +313,35 @@ class SingleXtal(object):
 		
 		self.R = qua
 
-	def rotate_by(self, q = None, axis = None, degrees = None):
+	def rotate_by(self, q = None, axis = None, degree = None):
 		if q is None:
-			if axis is None or degrees is None:
+			if axis is None or degree is None:
 				raise ValueError('Empty Parameters')
-			q = Quaternion(axis = axis, degrees = degrees)
-		logging.debug('rotation: axis = %s, degrees = %f'%(str(q.axis), q.degrees))
+			q = Quaternion(axis = axis, degrees = degree)
+		logging.debug('rotation: axis = %s, degree = %f'%(str(q.axis), q.degrees))
 		self.vecx = self.vecx.rotate_by(q)
 		self.vecy = self.vecy.rotate_by(q)
 		self.vecz = self.vecz.rotate_by(q)
 		self.R = q * self.R
-		self.reciprocal_matrix = Rotate_vectors_by_qua(self.reciprocal_matrix, q)
+		self.rcp_matrix = Rotate_vectors_by_qua(self.rcp_matrix, q)
 
+	def Calc_rcp_space(self, hklrange):
+		hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
+		self.rcp_space = zip(hkls, self.Gen_vec_in_rcp(hkls))
+		self.rcp_space_num = len(hkls)
+
+	def Save_rcp_space(self, filename):
+		if not hasattr(self, 'rcp_space'):
+			raise ValueError('No reicprocal space')
+
+		with open(filename, 'w') as f:
+			f.writelines('%d\n'%(self.rcp_space_num))
+			f.writelines('index kx ky kz\n')
+			for hkl, vec in self.rcp_space:
+				f.writelines('%s %f %f %f\n'%(hkl.str, vec[0], vec[1], vec[2]))
+
+	def copy(self):
+		return copy.copy(self)
 
 '''
 	FUNCTION DEFINITION
@@ -339,12 +356,14 @@ def Rotate_vectors_by_qua(vs, qua):
 	TEST
 '''
 if __name__ == '__main__':
-	l = LTTC.Lattice(material = 'Ta')
-	sx = SingleXtal(l, z = (1,1,1), x = (-1,1,0))
-	sx.lattice.LP.report()
+	l = LTTC.Lattice(material = 'Cu')
+	sx = SingleXtal(l, z = (0,0,1), x = (1,0,0))
+	sx.Calc_rcp_space((15,15,15))
+	sx.Save_rcp_space('rcp.dat')
+	# print(sx.vecs,sx.R,sx.rcp_matrix)
 	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
 	# sx.lattice.LP.report()
 	# sx.strain1d(direction = (-1,1,0), ratio = 0.02)
 	# sx.strain1d(direction = (-1,-1,2), ratio = 0.02)
 	# sx.lattice.LP.report()
-	print(sx.Vec_in_sx((LTTC.index((1,1,1)), LTTC.index((-1,1,0)), LTTC.index((1,0,0)))))
+	# print(sx.Vec_in_sx((LTTC.index((1,1,1)), LTTC.index((1,-1,-1)), LTTC.index((-1,-1,-1)))))

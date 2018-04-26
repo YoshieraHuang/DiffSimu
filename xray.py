@@ -19,8 +19,15 @@ class Xray(object):
 			intensity: corresponding intensities of X-ray
 			spectrum: spectrum of X-ray, zip of wavelength and intensity
 	'''
-	def __init__(self,*, wavelength = None, energy = None, intensity = None, filename = None, islambda = True, EPS = None):
+	def __init__(self,tag = None, *, wavelength = None, energy = None, intensity = None, filename = None, islambda = True, EPS = None):
 		super().__init__()
+
+		self.white = False
+
+		if not tag is None:
+			if tag in ('white','WHITE','White'):
+				self.white = True
+				return
 
 		if wavelength is None and energy is None:
 			self.Gen_from_file(filename, islambda)
@@ -128,6 +135,9 @@ class Xray(object):
 
 	def intn_wl(self, wl, EPS = 0):
 
+		if self.white:
+			return 1 if wl > 0. else 0
+
 		idx = FT.where(self.wavelength, wl)
 		if idx:
 			return self.intensity[idx - 1]
@@ -147,6 +157,9 @@ class Xray(object):
 		
 	@property
 	def spectrum(self, islambda = True):
+		if self.white:
+			raise ValueError('\'White\' Xray can\'t provide discrete spectrum')
+
 		xx = self.wavelength if islambda else self.energy
 		if xx.shape == ():
 			return np.array((xx, self.intensity))[None,:]
@@ -159,6 +172,10 @@ class Xray(object):
 		return len(self.tag_wl)
 
 	def show(self, islambda = True):
+		if self.white:
+			print('spectrum is \'white\'!')
+			return
+
 		xx = self.wavelength if islambda else self.energy
 		xlabel = 'wavelength (A)' if islambda else 'energy (keV)'
 		y = self.intensity
@@ -176,12 +193,29 @@ class Xray(object):
 		plt.ylabel('Intensity (a. u.)')
 		plt.show()
 
+	def save(self, filename, islambda = True):
+		if self.white:
+			print('spectrum is \'white\'!')
+			return
+
+		xlabel = 'wavelength (A)' if islambda else 'energy (keV)'
+
+		data = self.spectrum
+
+		with open(filename,'w') as f:
+			f.writelines(xlabel + ' ' + 'intensity\n')
+			for d in data:
+				f.writelines(str(d[0])+' '+str(d[1])+'\n')
+
 if __name__ == '__main__':
 	# x = Xray(wavelength = np.arange(0.4, 0.5, 0.001))
-	x = Xray(filename = 'u18_gap12mm.txt', islambda = False, EPS = 1e12)
+	# x = Xray(filename = 'u18_gap12mm.txt', islambda = False, EPS = 1e12)
 	# x.Gen_tag(range_wl = (0.3,0.1))
 	# x = Xray(wavelength = 0.5)
 	# x.Gen_tag()
-	print(x.intn_wl(0.53, EPS = 1e10))
+	# x = Xray('White')
+	# print(x.intn_wl(0.53, EPS = 1e10))
+	x = Xray(energy = np.arange(5,20,0.1))
 	x.show()
+	x.save('spectrum.txt')
 	

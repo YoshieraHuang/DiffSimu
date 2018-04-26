@@ -51,16 +51,16 @@ class Peak(object):
 	@args.setter
 	def args(self, v):
 		self._args = v
-		self.Gen_peak()
+		self.Calc_shape()
 
 	@property
-	def shape(self):
-		return self._shape
+	def shape_name(self):
+		return self._shape_name
 
-	@shape.setter
-	def shape(self, v):
-		self._shape = v
-		self.Gen_peak()
+	@shape_name.setter
+	def shape_name(self, v):
+		self._shape_name = v
+		self.Calc_shape()
 
 	@property
 	def index(self):
@@ -82,16 +82,16 @@ class Peak(object):
 			raise TypeError('Must be float!')
 		self._d_spacing = v
 
-	def __init__(self, *, peak_shape = 'Gauss1d', peak_args = (0.1,), tth = None, gamma = None, intn = 1):
+	def __init__(self, *, peak_shape_name = 'Gauss1d', peak_args = (0.1,), tth = None, gamma = None, intn = 1):
 		super().__init__()
 
 		self._args = peak_args
-		self._shape = peak_shape
+		self._shape_name = peak_shape_name
 		self._tth = tth
 		self._gamma = gamma
 		self._intn = intn
 
-		self.Gen_peak()
+		self.Calc_shape()
 
 	def Gaussian1d(self, width = 0.1):
 		a = self.tth
@@ -103,14 +103,14 @@ class Peak(object):
 		g = width/2
 		return lambda x: g/(np.pi* ((x - a)**2 + g**2))/(1/(np.pi*g))
 
-	def Gen_peak(self):
-		if self.shape == 'Gaussian1d':
-			self.peak_frame = self.Gaussian1d(*self.args)
-		if self.shape == 'Lorentzian1d':
-			self.peak_frame = self.Lorentzian1d(*self.args)
+	def Calc_shape(self):
+		if self.shape_name == 'Gaussian1d':
+			self.peak_shape = self.Gaussian1d(*self.args)
+		if self.shape_name == 'Lorentzian1d':
+			self.peak_shape = self.Lorentzian1d(*self.args)
 
-	def frame(self, x):
-		return self.intn * self.peak_frame(x)
+	def profile(self, x):
+		return self.intn * self.peak_shape(x)
 
 	def show(self, start = 0, end = 90, precision = 0.01):
 		import matplotlib.pyplot as plt
@@ -119,11 +119,11 @@ class Peak(object):
 		ax = fig.gca()
 
 		x = np.linspace(start, end, (end - start)/ precision)
-		line, = ax.plot(x, self.frame(x))
+		line, = ax.plot(x, self.profile(x))
 		ax.set(xlim = [start, end], title = 'peak', xlabel = '2theta (degree)', ylabel = 'Intensity (a. u.)')
 		plt.show()
 
 
 if __name__ == '__main__':
-	p = Peak(tth = 30, peak_shape = 'Gaussian1d', peak_args = (2,))
+	p = Peak(tth = 30, peak_shape_name = 'Gaussian1d', peak_args = (2,))
 	p.show(20,50, 0.1)

@@ -6,6 +6,8 @@ import numpy as np
 import sys
 import logging; logging.basicConfig(level = logging.INFO)
 import matplotlib.pyplot as plt
+from collections import Iterable
+import copy
 
 import singleXtal as SX
 import lattice as LTTC
@@ -20,6 +22,8 @@ class Pattern2d(object):
 	def __init__(self, sx = None, xray = None, inc = None, x = None):
 		super(Pattern2d, self).__init__()
 		if not sx is None:
+			if not isinstance(sx, Iterable):
+				sx = np.array(sx)[None]
 			self._sx = sx
 		if not inc is None:
 			self._inc = inc
@@ -44,8 +48,13 @@ class Pattern2d(object):
 
 	@sx.setter
 	def sx(self, sxtal):
-		if not isinstance(sxtal, SX.SingleXtal):
-			raise ValueError('SINGLEXTAL!')
+		if not isinstance(sxtal, Iterable):
+			sxtal = np.array(sxtal)[None]
+
+		for sxt in sxtal:
+			if not isinstance(sxt, SX.SingleXtal):
+				raise ValueError('SINGLE XTAL!')
+
 		self._sx = sxtal
 
 	@property
@@ -61,7 +70,7 @@ class Pattern2d(object):
 			self._inc = v.norm
 
 		if isinstance(v, LTTC.index):
-			self._inc = self.sx.Vec_in_sx(v).norm
+			self._inc = self.sx.vec_in_rcp(v).norm
 
 	@property
 	def vx(self):
@@ -83,10 +92,10 @@ class Pattern2d(object):
 		def lp(tth):
 			return (1 + np.cos(tth)**2)/(np.cos(tth/2)*(np.sin(tth/2)**2))
 
-		sc_factor = lp(peak.tth) * np.abs(self.sx.lattice.sc_factor(peak.index, peak.tth, peak.wl))**2
+		sc_factor = lp(peak.tth) * np.abs(peak.grain.lattice.sc_factor(peak.index, peak.tth, peak.wl))**2
 		return peak.wlintn * sc_factor
 
-	def Calc(self, hklrange = (10,10,10)):
+	def Calc(self, hklrange = (10,10,10), EPS = 0):
 		if not hasattr(self, 'sx'):
 			raise ValueError('No singleXtal')
 		if not hasattr(self, 'xray'):
@@ -94,36 +103,67 @@ class Pattern2d(object):
 		if not hasattr(self, 'inc'):
 			raise ValueError('No Incidence')
 
-		self.peaks = list(self.Calc_peak(hklrange = hklrange))
+		self.num_tag(self.sx)
+		hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.sx[0].lattice))
+		self.peaks = self.Calc_peak(hkls, EPS = EPS)
 
-	def Calc_peak(self, hklrange = (10,10,10)):
-		sx = self.sx
-		inc = self.inc
-		xr = self.xray
-		hkls = FT.tolist(LTTC.Gen_hkls(hklrange = hklrange, lattice = sx.lattice))
-		for hkl, vec in zip(hkls, sx.vec_in_sx(hkls)):
-			d_spacing = 1 / vec.length
-			tth = 2*vec.betweenangle_rad(inc) - np.pi
-			if tth <= 0 or tth >= np.pi:
-				continue
-			wl = 2 * d_spacing * np.sin(tth/2)
-			wlintn = xr.intn_wl(wl)
-			if wlintn == 0:
-				continue
-			k_inc = inc / wl
-			k_out = k_inc + vec
-			peak = PK.Peak()
-			peak.index = hkl
-			peak.tth, peak.gamma = sx.tthgam_rad(k_out, z = -inc, x = self.vx)
-			peak.wl = wl
-			peak.wlintn = wlintn
-			peak.d_spacing = d_spacing
-			peak.intn = self.Calc_peak_intn(peak)
-			logging.debug('PEAK info:index: %r, d: %f, lambda:%f, tth: %f, intn: %f'%(hkl, d_spacing, wl, np.rad2deg(tth), peak.intn))
-			yield peak
+	def Calc_peak(self, hkls, EPS = 0):
+
+		def isdeplicate(peak, peaks, EPS = np.deg2rad(0.05)):
+			if len(peaks) == 0:
+				return False
+
+			tth, gamma = peak.tth, peak.gamma
+			for i,p in enumerate(peaks):
+				if FT.equal(p.tth, tth, EPS) and FT.equal(p.gamma, gamma, EPS):
+					if peak.intn > p.intn:
+						logging.debug('%s is excluded because of %s'%(peak.index.str, p.index.str))
+						# print('%s is excluded because of %s'%(p.index.str, peak.index.str))	
+						del peaks[i]
+					else:
+						logging.debug('%s is excluded because of %s'%(peak.index.str, p.index.str))
+						# print('%s is excluded because of %s'%(peak.index.str, p.index.str))				
+						return True
+
+			return False
+
+		peaks = []
+		for sx in self.sx:
+			inc = self.inc
+			xr = self.xray
+			for hkl in hkls:
+				vec = sx.vec_in_rcp(hkl)
+				d_spacing = 1 / vec.length
+				tth = 2*vec.betweenangle_rad(inc) - np.pi
+				if tth <= np.deg2rad(1) or tth >= np.deg2rad(179):
+					continue
+				wl = 2 * d_spacing * np.sin(tth/2)
+				wlintn = xr.intn_wl(wl)
+				if wlintn == 0:
+					continue
+				k_inc = inc / wl
+				k_out = k_inc + vec
+				peak = PK.Peak()
+				peak.index = hkl
+				peak.vec = vec 
+				peak.tth, peak.gamma = sx.tthgam_rad(k_out, z = inc, x = self.vx)
+				peak.wl = wl
+				peak.energy = xr.energy_from_lambda(wl)
+				peak.wlintn = wlintn
+				peak.d_spacing = d_spacing
+				peak.grain = sx
+				peak.intn = self.Calc_peak_intn(peak)
+				if peak.intn > EPS and not isdeplicate(peak,peaks):
+					logging.debug('PEAK info:index: %r, d: %f, lambda:%f, tth: %f, intn: %f'%(hkl, d_spacing, wl, np.rad2deg(tth), peak.intn))
+					peaks.append(peak)
+		return np.array(peaks)
 
 	def rotate_sx(self, q):
 		self.inc = self.inc.rotate_by(q.inverse)
+
+	def num_tag(self, sxs):
+		for i,sx in enumerate(sxs):
+			sx.number = i+1
 
 	def show(self):
 		fig = plt.figure()
@@ -134,19 +174,53 @@ class Pattern2d(object):
 		intn = [peak.intn  for peak in self.peaks]
 		size = intn / np.linalg.norm(intn) * 200
 		for peak in self.peaks:
-			print(peak.index, np.rad2deg(peak.tth), np.rad2deg(peak.gamma), peak.wl, peak.intn)
+			print(peak.index, peak.grain.number, np.rad2deg(peak.tth), np.rad2deg(peak.gamma), peak.vec, peak.wl, peak.intn)
 		ax.scatter(tth, gamma, size)
 		plt.show()
 
+	def save(self, filename):
+		if not hasattr(self, 'peaks'):
+			print('No peaks!')
+			return
+
+		with open(filename, 'w') as f:
+			f.writelines('%d\n'%(self.peaks.shape[0]))
+			f.writelines('index grain tth gamma kx ky kz d_spacing intn lambda\n')
+			for p in self.peaks:
+				f.writelines('%s %d %f %f %f %f %f %f %f %f\n'%(p.index.str, p.grain.number, np.rad2deg(p.tth), np.rad2deg(p.gamma), p.vec[0], p.vec[1], p.vec[2], p.d_spacing, p.intn, p.wl))
+
+	def copy(self):
+		return copy.copy(self)
+
+	def __add__(self,other):
+		if not isinstance(other, Pattern2d):
+			raise ValueError('Only \'Pattern2d\' can be added!')
+
+		if not hasattr(other, 'peaks'):
+			raise ValueError('No peaks information!')
+
+		if not self.xray == other.xray:
+			raise ValueError('XRAY should be identical!')
+
+		new = self.copy()
+		new.sx = np.hstack((self.sx, other.sx))
+		new.num_tag(self.sx)
+		new.peaks = np.hstack((self.peaks, other.peaks))
+
+		return new
+
+
 
 if __name__ == '__main__':
-	lttc = LTTC.Lattice(material = 'Ta')
-	sx = SX.SingleXtal(lttc, x = (-1,1,0), z = (1,1,1))
-	sx.rotate_by(axis = (1,0,0), degrees = -6)
-	xr = XR.Xray(wavelength = np.linspace(0.5, 0.6, 1000))
-	inc = Vector(0,0,-1)
+	lttc = LTTC.Lattice(material = 'Si')
+	sx = SX.SingleXtal(lttc, x = (1,0,0), z = (0,0,1))
+	# sx.rotate_by(axis = (1,0,0), degree = -6)
+	# xr = XR.Xray(wavelength = np.linspace(0.5, 0.6, 1000))
+	xr = XR.Xray('White')
+	inc = Vector(0,0,1)
 	p = Pattern2d(sx = sx, xray = xr, inc = inc)
-	p.Calc(hklrange = (5,5,5))
+	p.Calc(hklrange = (5,5,10))
 	p.show()
+	p.save('peaks.txt')
 
 
