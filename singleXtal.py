@@ -325,8 +325,9 @@ class SingleXtal(object):
 		self.R = q * self.R
 		self.rcp_matrix = Rotate_vectors_by_qua(self.rcp_matrix, q)
 
-	def Calc_rcp_space(self, hklrange):
-		hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
+	def Calc_rcp_space(self, hklrange, *, hkls = None):
+		if not hkls:
+			hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
 		self.rcp_space_hkls = hkls
 		self.rcp_space_vec = list(self.Gen_vec_in_rcp(hkls))
 		self.rcp_space_num = len(hkls)

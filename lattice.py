@@ -259,14 +259,14 @@ class Lattice(object):
 
 		if isinstance(atom, Atom):
 			self.atoms.append(atom)
-			logging.debug('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
+			logging.info('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
 		elif isinstance(atom, Iterable):
 			for a in atom:
 				if not isinstance(a, Atom):
 					raise TypeError('argument should be type \'Atom\'')
 
 				self.atoms.append(a)
-				logging.debug('Appending of atom %s at %s is done!'% (a.element.name, str(a.coor)))
+				logging.info('Appending of atom %s at %s is done!'% (a.element.name, str(a.coor)))
 
 	def Atoms_from_structure(self, structure, element):
 
@@ -489,7 +489,7 @@ class Familyindex(index):
 			self._sons = [index(s) for s in store]
 			return self._sons
 
-		return ()
+		return (index(self),)
 
 	@property
 	def multiplicity(self):
