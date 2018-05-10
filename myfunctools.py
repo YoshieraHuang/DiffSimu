@@ -4,6 +4,7 @@
 
 import numpy as np
 
+
 def where(arr, value):
 	idx = np.argwhere(arr == value)
 	if idx.shape == (0,1):

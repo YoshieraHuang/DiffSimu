@@ -341,6 +341,44 @@ class SingleXtal(object):
 			for hkl, vec in zip(self.rcp_space_hkls, self.rcp_space_vec):
 				f.writelines('%s %f %f %f\n'%(hkl.str, vec[0], vec[1], vec[2]))
 
+	def Project_rcp_space(self, proj_vec = Vector(0,0,1), vecx = Vector(1,0,0), origin = Vector(0,0,0)):
+		if not hasattr(self, 'rcp_space_num'):
+			raise ValueError('No rcp_space')
+
+		if not isinstance(proj_vec, Vector):
+			proj_vec = Vector(proj_vec)
+
+		if not isinstance(origin, Vector):
+			origin = Vector(origin)
+
+		if not isinstance(vecx, Vector):
+			vecx = Vector(vecx)
+
+		self.project_rcp_space_vec = list(self.Gen_project_vec(self.rcp_space_vec, proj_vec = proj_vec.norm, vecx = vecx.norm, origin = origin))
+
+	def Gen_project_vec(self, vecs, proj_vec = Vector(0,0,1), vecx = Vector(1,0,0), origin = Vector(0,0,0)):
+		for vec in vecs:
+			yield self.project_vec(vec, proj_vec = proj_vec.norm, vecx = vecx.norm, origin = origin)
+
+	def project_vec(self, vec, proj_vec = Vector(0,0,1), vecx = Vector(1,0,0), origin = Vector(0,0,0)):
+		proj_vec = proj_vec.norm
+		vecx = vecx.norm
+		dis = (vec - origin).dot(proj_vec) ## distance from initial point to projection plane
+		projected = vec - origin - dis*proj_vec ## projection vector on projection plane in 3D 
+		vecy = proj_vec.cross(vecx) ## y axis in projection plane
+		proj_x, proj_y = projected.dot(vecx), projected.dot(vecy) ## coordinates in projection coordinates system
+		return (proj_x, proj_y, dis)
+
+	def Save_proj_rcp_space(self, filename):
+		if not hasattr(self, 'project_rcp_space_vec'):
+			raise ValueError('No projected reciprocal space')
+
+		with open(filename,'w') as f:
+			f.writelines('%d\n'%(self.rcp_space_num))
+			f.writelines('h k l vx vy distance\n')
+			for hkl, vec in zip(self.rcp_space_hkls, self.project_rcp_space_vec):
+				f.writelines('%s %f %f %f\n'%(hkl.str, vec[0], vec[1], vec[2]))
+
 	def copy(self):
 		return copy.copy(self)
 
@@ -359,8 +397,10 @@ def Rotate_vectors_by_qua(vs, qua):
 if __name__ == '__main__':
 	l = LTTC.Lattice(material = 'Cu')
 	sx = SingleXtal(l, z = (0,0,1), x = (1,0,0))
-	sx.Calc_rcp_space((15,15,15))
+	sx.Calc_rcp_space((5,5,5))
 	sx.Save_rcp_space('rcp2.dat')
+	sx.Project_rcp_space(proj_vec = (1,1,1), vecx = (1,-1,0))
+	sx.Save_proj_rcp_space('rcp_proj.dat')
 	# print(sx.vecs,sx.R,sx.rcp_matrix)
 	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
 	# sx.lattice.LP.report()
