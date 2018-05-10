@@ -364,7 +364,7 @@ if __name__ == '__main__':
 	# p.show()
 	p.Add_geometry(inc = inc, x = Vector(1,0,0))
 	# det1 = Detector(normal = -inc , size = (400, 400), poni = ('c','c'), x = (1,0,0), dist = 250)
-	det1 = Detector(normal = inc , size = (400, 400), poni = ('c','c'), dist = 250)
+	det1 = Detector(normal = inc , size = (400, 400), poni = ('c','c'), dist = 500)
 	# det1.rotate_by(axis = (1,1,0), degree = 60)
 	# det1.set(poni = (-50,'c'))
 	det1.Calc_peaks(p)

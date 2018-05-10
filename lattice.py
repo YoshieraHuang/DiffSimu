@@ -10,6 +10,7 @@ import logging; logging.basicConfig(level = logging.INFO)
 import itertools
 import re
 import types
+from collections import Iterable
 
 # My modules
 import LUT
@@ -255,11 +256,25 @@ class Lattice(object):
 		logging.info('Appending of lattice parameters is done!')
 
 	def Add_atom(self, atom):
-		if not type(atom) is Atom:
-			raise TypeError('argument should be type \'Atom\'')
 
-		self.atoms.append(atom)
-		logging.debug('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
+		if isinstance(atom, Atom):
+			self.atoms.append(atom)
+			logging.debug('Appending of atom %s at %s is done!'% (atom.element.name, str(atom.coor)))
+		elif isinstance(atom, Iterable):
+			for a in atom:
+				if not isinstance(a, Atom):
+					raise TypeError('argument should be type \'Atom\'')
+
+				self.atoms.append(a)
+				logging.debug('Appending of atom %s at %s is done!'% (a.element.name, str(a.coor)))
+
+	def Atoms_from_structure(self, structure, element):
+
+		atomsymbols = Replace_placeholder(LUT.dict_structure[structure][1], (element), diction = {})
+		atoms = []
+		for atomsymbol in atomsymbols[1:]:
+			atoms.append(Atom(*atomsymbol))
+		return atoms
 
 	def show(self):
 		self.LP.report()

@@ -208,5 +208,3 @@ if __name__ == '__main__':
 	# p.Calc(hklrange = (5,5,5))
 	p = Profile1D(xray = xr, px = px)
 	p.Calc(range_2th = (10, 20), precision = 0.001)
-	p.show()
-	p.save_peaks('1d.dat')
