@@ -8,6 +8,7 @@ import logging; logging.basicConfig(level = logging.INFO)
 import itertools
 from scipy import linalg
 import copy
+import multiprocessing
 
 from pyquaternion import Quaternion
 import lattice as LTTC
@@ -255,6 +256,13 @@ class SingleXtal(object):
 		if hasattr(self, '_rcp_matrix'):
 			del self._rcp_matrix
 
+	def Calc_vec_in_rcp_para(self, hkls):
+		n_cpu = multiprocessing.cpu_count()
+		print(n_cpu)
+		pool = multiprocessing.Pool(processes = n_cpu)
+		vecs = pool.map(self.vec_in_rcp, hkls)
+		return list(vecs)
+
 	def Gen_vec_in_rcp(self, hkls):
 		return self.lattice.Gen_vec_in_rcp(hkls, rcp_matrix = self.rcp_matrix)
 
@@ -327,9 +335,11 @@ class SingleXtal(object):
 
 	def Calc_rcp_space(self, hklrange, *, hkls = None):
 		if not hkls:
-			hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
+			# hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.lattice))
+			hkls = LTTC.Create_hkls(hklrange = hklrange, lattice = self.lattice)
 		self.rcp_space_hkls = hkls
 		self.rcp_space_vec = list(self.Gen_vec_in_rcp(hkls))
+		# self.rcp_space_vec = self.Calc_vec_in_rcp_para(hkls)
 		self.rcp_space_num = len(hkls)
 
 	def Save_rcp_space(self, filename):
@@ -396,12 +406,18 @@ def Rotate_vectors_by_qua(vs, qua):
 	TEST
 '''
 if __name__ == '__main__':
+	import time
+	start = time.clock()
 	l = LTTC.Lattice(material = 'Cu')
-	sx = SingleXtal(l, z = (0,0,1), x = (1,0,0))
-	sx.Calc_rcp_space((5,5,5))
+	sx = SingleXtal(l, z = (1,1,1), x = (1,-1,0))
+	print("time1: %f s"%(time.clock() - start))
+	sx.Calc_rcp_space((15,15,15))
+	print("time1: %f s"%(time.clock() - start))
 	sx.Save_rcp_space('rcp2.dat')
-	sx.Project_rcp_space(proj_vec = (0,0,-1), vecx = (0,1,0))
-	sx.Save_proj_rcp_space('rcp_proj.dat')
+	elapsed = time.clock() - start
+	print("time elapsed: %f s"%(elapsed))
+	# sx.Project_rcp_space(proj_vec = (0,0,-1), vecx = (0,1,0))
+	# sx.Save_proj_rcp_space('rcp_proj.dat')
 	# print(sx.vecs,sx.R,sx.rcp_matrix)
 	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
 	# sx.lattice.LP.report()

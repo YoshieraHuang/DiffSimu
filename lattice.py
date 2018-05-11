@@ -11,6 +11,7 @@ import itertools
 import re
 import types
 from collections import Iterable
+from pathos.multiprocessing import ProcessingPool as Pool
 
 # My modules
 import LUT
@@ -539,6 +540,14 @@ def Replace_placeholder(data, args, diction = {}, i = 0, top = True):
 		else:
 			return data, diction, i
 
+def Create_hklfamilies(hklrange = (10,10,10), lattice = None):
+	# if lattice is None:
+	# 	hkls = Gen_hkls(hklrange = hklrange)
+	# 	for hkl in hkls:
+	# 		hklfamily = Familyindex(hkl)
+	# 		hklfamily.add_sons(hkl)
+	# 		hklfamily
+	pass
 
 def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 	'''
@@ -588,7 +597,30 @@ def Gen_hklfamilies(hklrange = (10,10,10), lattice = None):
 					hklfamily.add_sons(hkl)
 			yield hklfamily
 
+def Create_hkls(hklrange = (10,10,10), lattice = None):
+	def sorted_range(end):
+		return sorted(range(-end, end+1), key = abs)
 
+	def give_index(hkl):
+		h,k,l = hkl
+		if h == 0 and k == 0 and l == 0:
+			return None
+		hkl = index((h,k,l))
+		if (lattice is None) or (not lattice.isextinct(hkl)):
+			return hkl
+		return None
+
+	h_range, k_range, l_range = list(sorted_range(hklrange[0])), list(sorted_range(hklrange[1])), list(sorted_range(hklrange[2]))
+	raw_hkls = itertools.product(h_range, k_range, l_range)
+	pool = Pool()
+	hkls = pool.map(give_index, list(raw_hkls))
+	hkls_wo_None = [hkl for hkl in hkls if not hkl is None]
+	# del hkls[0]	
+	# for i,hkl in enumerate(hkls):
+	# 	if hkl is None:
+	# 		print(hkl, hkls[i],'del')
+	# 		hkls.pop(i)
+	return hkls_wo_None
 
 def Gen_hkls(hklrange = (10,10,10), lattice = None):
 	'''
@@ -613,14 +645,17 @@ def Gen_hkls(hklrange = (10,10,10), lattice = None):
 '''
 
 if __name__ == '__main__':
-	# l = Lattice(material = 'Mg')
+	l = Lattice(material = 'Mg')
 	# l.LP.show()
 	# hkls = FT.tolist(Gen_hklfamilies((3,3,3), lattice = l))
 	# vs = l.vec_in_lattice(hkls)
 	# ds = l.d_spacing(hkls)
 	# for hkl,v, d in zip(hkls,vs, ds):
 	# 	print(hkl,hkl.multiplicity,v, d)
-	hkls = FT.tolist(Gen_hkls((3,3,3)))
+	import time
+	start = time.clock()
+	hkls = list(Create_hkls((15,15,15), lattice = l))
+	print("time: %f s"%(time.clock() - start))
 	# print(l.Vec_in_lattice((index((1,0,0)), index((0,1,0)), index((0,0,1)))))
 	# ele = Element('Cu')
 	# print(ele.sc_factor(np.deg2rad(30), 0.5))

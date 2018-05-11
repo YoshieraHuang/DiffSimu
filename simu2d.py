@@ -8,6 +8,7 @@ import logging; logging.basicConfig(level = logging.INFO)
 import matplotlib.pyplot as plt
 from collections import Iterable
 import copy
+from pathos.multiprocessing import ProcessingPool as Pool
 
 import singleXtal as SX
 import lattice as LTTC
@@ -103,9 +104,77 @@ class Pattern2d(object):
 		if not hasattr(self, 'inc'):
 			raise ValueError('No Incidence')
 
+		import time
+		start = time.clock()
 		self.num_tag(self.sx)
-		hkls = list(LTTC.Gen_hkls(hklrange = hklrange, lattice = self.sx[0].lattice))
-		self.peaks = self.Calc_peak(hkls, EPS = EPS)
+		# hkls = list(LTTC.Create_hkls(hklrange = hklrange, lattice = self.sx[0].lattice))
+		# print("Calc time 1 : %f s"%(time.clock() - start))
+		# self.peaks = self.Calc_peak(hkls, EPS = EPS)
+		# print("Calc time 2 : %f s"%(time.clock() - start))
+		for sx in self.sx:
+			sx.Calc_rcp_space(hklrange)
+		print("Calc time 1 : %f s"%(time.clock() - start))
+		self.peaks = self.Calc_peak_para()
+		print("Calc time 2 : %f s"%(time.clock() - start))
+
+	def Calc_peak_para(self, EPS = 0):
+		def give_peak(args):
+			hkl, vec = args
+			d_spacing = 1 / vec.length
+			tth = 2 * vec.betweenangle_rad(inc) - np.pi
+			if tth <= np.deg2rad(1) or tth >= np.deg2rad(179):
+				return None
+			wl = 2 * d_spacing * np.sin(tth/2)
+			wlintn = xr.intn_wl(wl)
+			if wlintn == 0:
+				return None
+			k_inc = inc / wl
+			k_out = k_inc + vec
+			peak = PK.Peak()
+			peak.index = hkl
+			peak.vec = vec 
+			peak.tth, peak.gamma = sx.tthgam_rad(k_out, z = inc, x = self.vx)
+			peak.wl = wl
+			peak.energy = xr.energy_from_lambda(wl)
+			peak.wlintn = wlintn
+			peak.d_spacing = d_spacing
+			peak.grain = sx
+			peak.intn = self.Calc_peak_intn(peak)
+			if peak.intn < EPS:
+				return None
+			return peak
+
+		def isdeplicate(peak, peaks, EPS = np.deg2rad(0.05)):
+			if len(peaks) == 0:
+				return False
+
+			tth, gamma = peak.tth, peak.gamma
+			for i,p in enumerate(peaks):
+				if FT.equal(p.tth, tth, EPS) and FT.equal(p.gamma, gamma, EPS):
+					if peak.intn > p.intn:
+						logging.debug('%s is excluded because of %s'%(peak.index.str, p.index.str))
+						# print('%s is excluded because of %s'%(p.index.str, peak.index.str))	
+						del peaks[i]
+					else:
+						logging.debug('%s is excluded because of %s'%(peak.index.str, p.index.str))
+						# print('%s is excluded because of %s'%(peak.index.str, p.index.str))				
+						return True
+
+			return False
+
+		pool = Pool()
+		all_peak = []
+		xr = self.xray
+		inc = self.inc
+		start = time.clock()
+		for sx in self.sx:
+			peaks = pool.map(give_peak, zip(sx.rcp_space_hkls, sx.rcp_space_vec))
+			print("Calc time 3 : %f s"%(time.clock() - start))
+			for peak in peaks:
+				if (not peak is None) and not isdeplicate(peak,all_peak):
+					all_peak.append(peak)
+			print("Calc time 4 : %f s"%(time.clock() - start))
+		return np.array(all_peak)
 
 	def Calc_peak(self, hkls, EPS = 0):
 
@@ -212,15 +281,20 @@ class Pattern2d(object):
 
 
 if __name__ == '__main__':
+	import time
+	start = time.clock()
 	lttc = LTTC.Lattice(material = 'Si')
 	sx = SX.SingleXtal(lttc, x = (1,0,0), z = (0,0,1))
+	print('time1: %f s'%(time.clock()-start))
 	# sx.rotate_by(axis = (1,0,0), degree = -6)
 	# xr = XR.Xray(wavelength = np.linspace(0.5, 0.6, 1000))
 	xr = XR.Xray('White')
 	inc = Vector(0,0,1)
 	p = Pattern2d(sx = sx, xray = xr, inc = inc)
-	p.Calc(hklrange = (5,5,10))
-	p.show()
+	print('time2: %f s'%(time.clock()-start))
+	p.Calc(hklrange = (15,15,15))
+	print('time3: %f s'%(time.clock()-start))
+	# p.show()
 	p.save('peaks.txt')
-
+	print('time: %f s'%(time.clock()-start))
 
