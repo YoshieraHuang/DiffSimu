@@ -362,11 +362,11 @@ class SingleXtal(object):
 			yield self.project_vec(vec, proj_vec = proj_vec.norm, vecx = vecx.norm, origin = origin)
 
 	def project_vec(self, vec, proj_vec = Vector(0,0,1), vecx = Vector(1,0,0), origin = Vector(0,0,0)):
-		proj_vec = proj_vec.norm
+		z = -proj_vec.norm
 		vecx = vecx.norm
-		dis = (vec - origin).dot(proj_vec) ## distance from initial point to projection plane
-		projected = vec - origin - dis*proj_vec ## projection vector on projection plane in 3D 
-		vecy = proj_vec.cross(vecx) ## y axis in projection plane
+		dis = (vec - origin).dot(z) ## distance from initial point to projection plane
+		projected = vec - origin - dis*z ## projection vector on projection plane in 3D 
+		vecy = z.cross(vecx) ## y axis in projection plane
 		proj_x, proj_y = projected.dot(vecx), projected.dot(vecy) ## coordinates in projection coordinates system
 		return (proj_x, proj_y, dis)
 
@@ -400,7 +400,7 @@ if __name__ == '__main__':
 	sx = SingleXtal(l, z = (0,0,1), x = (1,0,0))
 	sx.Calc_rcp_space((5,5,5))
 	sx.Save_rcp_space('rcp2.dat')
-	sx.Project_rcp_space(proj_vec = (1,1,1), vecx = (1,-1,0))
+	sx.Project_rcp_space(proj_vec = (0,0,-1), vecx = (0,1,0))
 	sx.Save_proj_rcp_space('rcp_proj.dat')
 	# print(sx.vecs,sx.R,sx.rcp_matrix)
 	# sx.strain1d(direction = (1,1,1), ratio = -0.04)
